@@ -2,7 +2,8 @@
 
 Know your limits before you hit them. Claude's, Codex's and Gemini's 5-hour and
 weekly limits sit in one line along the bottom of the window, each coloured green,
-yellow or red, with when it resets. Hover a service to see every limit.
+yellow or red, with when it resets. Cursor and Grok quotas can be enabled through
+[CodexBar](../README.md#cursor-and-grok-quotas). Hover a service to see every limit.
 
 ![Over9k Usage](preview.png)
 
@@ -43,12 +44,18 @@ yellow or red, with when it resets. Hover a service to see every limit.
   - **Codex:** its latest session file under `~/.codex/sessions`.
   - **Gemini:** `~/.cache/over9k/usage/antigravity.json`, from Antigravity's
     status line (`agy-statusline.sh` in the Over9k layout: Options › Session footers).
+  - **Cursor and Grok:** `codexbar usage --provider <name> --format json`,
+    polled every five minutes when named in the `codexbar` array in Herdr's
+    `data/over9k-usage.json`. Show measured quota windows with their supplied
+    labels and reset times. Display **Unavailable** when there is no current
+    reading.
 
 ## Built from
 
 - **`mods/over9k-usage/`**, with `mod.json` set to
   `{"place": "bottom", "size": 30}`:
   - `main.js`: the strip, or the layout's rows.
+  - `codexbar.js`: parses the optional Cursor and Grok quota readings.
   - `claude-statusline.sh`: the optional status line.
   - `setup.sh`: turns it on or off.
 - `main.js` draws rows when the layout has a block with id `usage` holding this
@@ -56,7 +63,8 @@ yellow or red, with when it resets. Hover a service to see every limit.
   block (`layout.resize`).
 - **herdr:** `layout`, `run`, `exec` (`sh`, `jq`), `readTextFile`, `notify`,
   `shared` (`sidebar.options` hides services in Over9k).
-- **Programs:** `sh` and `jq`.
+- **Programs:** `sh` and `jq`. Cursor and Grok use the optional `codexbar`
+  executable, which makes its own provider requests.
 
 ## Watch out
 

@@ -18,15 +18,17 @@
 //                Antigravity's (over9k/antigravity/agy-statusline.sh, optional: README):
 //                gemini-* and 3p-* (Claude and GPT) buckets, and the plan.
 //   Codex        the last rate_limits in its newest session file.
-// Each is as fresh as that program's last run; a limit whose reset time has
-// passed shows 0%. Limits belong to the account, not the computer: Claude's and
-// Gemini's come from whichever connected computer saved them last (REMOTE), when
+//   Cursor/Grok  CodexBar CLI, when enabled in the mod's local data file.
+// The file-based limits are as fresh as the agent's last run and show 0% after
+// reset. Claude's and Gemini's come from whichever connected computer saved
+// them last (REMOTE), when
 // it's the same Claude account (accountUuid in ~/.claude.json) or Gemini plan. Over9k's Options › Usage (shared "sidebar.options": usage,
 // usageClaude, usageCodex, usageGemini) hides the section or a service.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, exec, home, appHome, run, shared, setShared, layout, notify, readTextFile, machines } from "herdr";
+import { codexBarCountdown, codexBarProviders, codexBarRow } from "./codexbar.js";
 
 const BLOCK = "usage";
 // Is this copy the Over9k layout's (its "usage" block above the footer)? Else it
@@ -36,6 +38,9 @@ function inLayout() {
   return Boolean(find(layout()));
 }
 const ROW = 28, LIMIT = 20, TABS = 26, GRAPH = 72;
+const CODEXBAR_INTERVAL = 300000;
+const codexBarHint = (s) => `Check codexbar usage --provider ${s.key} in a terminal.`;
+const limitKey = (limit) => limit.key ?? limit.label;
 
 const CODEX = `f=$(ls -t "$HOME"/.codex/sessions/*/*/*/*.jsonl 2>/dev/null | head -n 1); [ -n "$f" ] || exit 0
 grep -o '"rate_limits":{.*' "$f" | tail -n 1 | sed 's/^"rate_limits"://' | jq -c '{plan: .plan_type, primary, secondary}' 2>/dev/null`;
@@ -93,6 +98,7 @@ export default class Usage extends View {
   init(_props, cx) {
     this.services = [];
     this.local = [];
+    this.codexBarRows = [];
     this.machineRows = {};
     this.remote = {}; // machine -> { claude, agy, account }: its saved limits
     this.fetching = new Set();
@@ -104,6 +110,18 @@ export default class Usage extends View {
         await this.load(cx);
         cx.notify();
         await cx.sleep(30000);
+      }
+    });
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const text = await readTextFile(`${appHome()}/data/over9k-usage.json`).catch(() => null);
+        this.codexBarRows = await Promise.all(codexBarProviders(text).map(async (id) => {
+          const result = await exec("codexbar", ["usage", "--provider", id, "--format", "json"], { timeout: 30000 }).catch(() => null);
+          return codexBarRow(id, result);
+        }));
+        this.compose();
+        cx.notify();
+        await cx.sleep(CODEXBAR_INTERVAL);
       }
     });
   }
@@ -192,14 +210,16 @@ export default class Usage extends View {
   // This computer's rows, with other machines' after its Claude.
   compose() {
     const at = this.local.findIndex((s) => s.key === "claude") + 1;
-    this.all = [...this.local.slice(0, at), ...Object.values(this.machineRows).filter(Boolean), ...this.local.slice(at)];
+    const extra = this.codexBarRows.map((row) => codexBarCountdown(row));
+    this.all = [...this.local.slice(0, at), ...Object.values(this.machineRows).filter(Boolean), ...this.local.slice(at), ...extra];
     this.pick();
   }
 
   // What Options says to show.
   pick() {
     const o = shared("sidebar.options") ?? {};
-    const want = { claude: o.usageClaude !== false, codex: o.usageCodex !== false, gemini: o.usageGemini !== false };
+    const want = { claude: o.usageClaude !== false, codex: o.usageCodex !== false, gemini: o.usageGemini !== false,
+      cursor: o.usageCursor !== false, grok: o.usageGrok !== false };
     this.services = o.usage === false ? [] : (this.all ?? []).filter((s) => want[s.service ?? s.key] !== false);
     this.fit();
   }
@@ -207,7 +227,7 @@ export default class Usage extends View {
   // The block's height: every row, plus the open ones' limits.
   fit() {
     if (!inLayout()) return;
-    const h = this.services.length ? 6 + this.services.reduce((n, s) => n + ROW + (this.open.has(s.key) ? (s.days ? TABS + GRAPH + Math.max(1, spendIn(s.days, this.period(s).days).models.length) * LIMIT : Math.max(1, s.limits?.length ?? 0) * LIMIT) + 4 : 0), 0) : 0;
+    const h = this.services.length ? 6 + this.services.reduce((n, s) => n + ROW + (this.open.has(s.key) && !s.unavailable ? (s.days ? TABS + GRAPH + Math.max(1, spendIn(s.days, this.period(s).days).models.length) * LIMIT : Math.max(1, s.limits?.length ?? 0) * LIMIT) + 4 : 0), 0) : 0;
     if (h !== this.height) { this.height = h; run("layout.resize", { id: BLOCK, px: h }); }
   }
 
@@ -221,7 +241,7 @@ export default class Usage extends View {
   // The limit a service's row shows: the one picked for it, or else its fullest.
   headline(s) {
     if (!s.limits?.length) return null;
-    return s.limits.find((l) => l.label === this.picked[s.key]) ?? s.limits.reduce((a, b) => (b.used > a.used ? b : a));
+    return s.limits.find((l) => limitKey(l) === this.picked[s.key]) ?? s.limits.reduce((a, b) => (b.used > a.used ? b : a));
   }
 
   // The tab a row billed by use is on: the one picked for it, or else the day.
@@ -236,8 +256,8 @@ export default class Usage extends View {
     cx.notify();
   }
 
-  pickHeadline(key, label, cx) {
-    if (this.picked[key] === label) delete this.picked[key]; else this.picked[key] = label;
+  pickHeadline(key, limit, cx) {
+    if (this.picked[key] === limit) delete this.picked[key]; else this.picked[key] = limit;
     setShared("over9k.usageHeadline", this.picked);
     this.fit();
     cx.notify();
@@ -277,10 +297,11 @@ export default class Usage extends View {
       .children(this.services.map((s) => {
         const top = this.headline(s);
         const p = s.days && this.period(s), sum = s.days && spendIn(s.days, p.days);
-        const all = s.days ? [SPEND_TIP, ...sum.models.map((x) => `${x.name}: ${money(x.cost)}`)].join("\n")
+        const all = s.unavailable ? codexBarHint(s) : s.days ? [SPEND_TIP, ...sum.models.map((x) => `${x.name}: ${money(x.cost)}`)].join("\n")
           : (s.limits ?? []).map((l) => `${l.label}: ${Math.round(l.used)}%${l.left != null ? `, resets in ${left(l.left)}` : ""}`).join("\n");
         return h_flex().id(`strip-${s.key}`).flex_none().gap(6).items_center().when(Boolean(all), (el) => el.tooltip(all))
           .child(div().text_color(t.muted).child(s.name))
+          .when(s.unavailable === true, (el) => el.child(div().text_color(t.dim).child("Unavailable")))
           .when(Boolean(s.plan), (el) => el.child(div().px(5).py(1).rounded(4).bg(t.raised).text_size(10.5).text_color(t.accent).child(s.plan)))
           .when(Boolean(s.where), (el) => el.child(div().text_size(11).text_color(t.dim).child(s.where)))
           .when(Boolean(s.days), (el) => el.child(div().text_size(11).text_color(t.dim).child(p.tab)).child(div().text_color(t.foreground).child(money(sum.total))))
@@ -302,7 +323,7 @@ export default class Usage extends View {
     const dim = (s) => div().text_size(11).text_color(t.dim).child(s);
     return v_flex().w_full().pt(3).px(10).border_t(1).border_color(t.border).bg(t.chrome).text_size(12.5)
       .children(this.services.map((s, i) => {
-        const open = this.open.has(s.key);
+        const open = this.open.has(s.key) && !s.unavailable;
         const top = this.headline(s);
         const p = s.days && this.period(s), sum = s.days && spendIn(s.days, p.days);
         // A model keeps its colour across the tabs: by its rank over all of them.
@@ -312,9 +333,9 @@ export default class Usage extends View {
         const most = Math.max(...shown.map((d) => spendIn([d], 1).total), 0);
         return v_flex().w_full()
           .when(i > 0, (el) => el.border_t(1).border_color(t.border))
-          .child(h_flex().id(`usage-${s.key}`).h(ROW).px(4).gap(6).items_center().rounded(6).cursor_pointer()
-            .hover((x) => x.bg(t.hover))
-            .on_click((_e, cx) => this.toggle(s.key, cx))
+          .child(h_flex().id(`usage-${s.key}`).h(ROW).px(4).gap(6).items_center().rounded(6)
+            .when(!s.unavailable, (el) => el.cursor_pointer().hover((x) => x.bg(t.hover)).on_click((_e, cx) => this.toggle(s.key, cx)))
+            .when(s.unavailable === true, (el) => el.tooltip(codexBarHint(s)))
             // Name and plan shrink too (the name is cut) once the reset time is gone,
             // so the right side never moves.
             .child(h_flex().min_w(0).flex_shrink(1).gap(6).items_center().overflow_hidden()
@@ -324,13 +345,14 @@ export default class Usage extends View {
             // The reset time gives way first when the sidebar is narrow (cut, then
             // gone); the dot, the % (fixed width, right-aligned) and the arrow stay put.
             .child(h_flex().flex_1().min_w(0).justify_end().overflow_hidden()
+              .when(s.unavailable === true, (el) => el.child(dim("Unavailable")))
               .when(Boolean(s.days), (el) => el.child(dim(p.tab)))
               .when(Boolean(top) && !open && top.left != null, (el) => el.child(h_flex().id(`reset-${s.key}`).min_w(0).gap(3).items_center().tooltip(`Resets in ${left(top.left)}`)
                 .child(dim(left(top.left)).min_w(0).truncate()))))
             .when(Boolean(top) && !open, (el) => el
               .child(div().w(32).flex_none().flex().justify_end().text_color(this.color(t, top.used)).child(`${Math.round(top.used)}%`)))
             .when(Boolean(s.days), (el) => el.child(div().id(`spend-${s.key}`).flex_none().pl(6).text_color(t.foreground).tooltip(`Last ${p.label}. ${SPEND_TIP}`).child(money(sum.total))))
-            .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(8).flex_none().flex_shrink_0().text_color(t.dim)))
+            .when(!s.unavailable, (el) => el.child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(8).flex_none().flex_shrink_0().text_color(t.dim))))
           .when(open && Boolean(s.days), (el) => el.child(v_flex().px(4).pb(4)
             .child(h_flex().h(TABS).pb(4).gap(2).children(PERIODS.map((x) => h_flex().id(`tab-${s.key}-${x.label}`).flex_1().h_full().items_center().justify_center()
               .rounded(4).cursor_pointer().text_size(11).tooltip(`Show the last ${x.label}`)
@@ -354,12 +376,12 @@ export default class Usage extends View {
               .child(div().w(7).h(7).flex_none().rounded(4).bg(color(x.name)))
               .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(x.name))
               .child(div().flex_none().text_color(t.foreground).child(money(x.cost)))))))
-          .when(open && Boolean(s.limits), (el) => el.child(v_flex().px(4).pb(4).children([...s.limits].sort((a, b) => (b.label === this.picked[s.key]) - (a.label === this.picked[s.key])).map((l) =>
-            h_flex().id(`limit-${s.key}-${l.label}`).h(LIMIT).items_center().gap(7).text_size(11.5).rounded(4).cursor_pointer()
+          .when(open && Boolean(s.limits), (el) => el.child(v_flex().px(4).pb(4).children([...s.limits].sort((a, b) => (limitKey(b) === this.picked[s.key]) - (limitKey(a) === this.picked[s.key])).map((l) =>
+            h_flex().id(`limit-${s.key}-${limitKey(l)}`).h(LIMIT).items_center().gap(7).text_size(11.5).rounded(4).cursor_pointer()
               .hover((x) => x.bg(t.hover))
-              .on_click((_e, cx) => this.pickHeadline(s.key, l.label, cx))
-              .tooltip(l.label === this.picked[s.key] ? "Unpin as headline number" : "Pin as headline number")
-              .child(div().w(82).flex_none().truncate().text_color(l.label === this.picked[s.key] ? t.accent : t.muted).child(l.label))
+              .on_click((_e, cx) => this.pickHeadline(s.key, limitKey(l), cx))
+              .tooltip(limitKey(l) === this.picked[s.key] ? "Unpin as headline number" : "Pin as headline number")
+              .child(div().w(82).flex_none().truncate().text_color(limitKey(l) === this.picked[s.key] ? t.accent : t.muted).child(l.label))
               .child(div().flex_1().h(3).rounded(2).bg(t.raised)
                 .child(div().h(3).rounded(2).bg(this.color(t, l.used)).w(`${Math.max(l.used > 0 ? 3 : 0, l.used)}%`)))
               .child(div().w(30).flex_none().flex().justify_end().text_color(this.color(t, l.used)).child(`${Math.round(l.used)}%`))

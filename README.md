@@ -89,6 +89,26 @@ from its latest session. Claude's need Over9k's session footer for Claude
 Code, and Gemini's the one for Antigravity (see [Session footers](#session-footers)). Hide any you don't use
 in Options.
 
+#### Cursor and Grok quotas
+
+The strip can also show Cursor and Grok subscription limits through the
+[CodexBar CLI](https://github.com/steipete/CodexBar/blob/main/docs/cli.md).
+Make `codexbar` available on Herdr's `PATH` and verify the accounts you want
+with `codexbar usage --provider cursor` and `codexbar usage --provider grok`.
+Create `data/over9k-usage.json` in your Herdr app home (normally
+`~/.config/herdr-app`) and list the providers you want to enable:
+
+```json
+{ "codexbar": ["cursor", "grok"] }
+```
+
+Over9k refreshes those providers every five minutes and shows their used
+percentages and reset times when reported. Hover a provider in the standalone
+strip to see all of its limits. The full Over9k layout can hide either row in
+**Options → Usage**. Remove a provider from the file to stop polling it.
+CodexBar handles sign-in and may contact the providers using its configured
+accounts. Over9k uses the quota windows and plan label from its output.
+
 ### [Switcher](over9k-switcher): Ctrl+Tab between agents
 
 ![Over9k Switcher](over9k-switcher/preview.png)
