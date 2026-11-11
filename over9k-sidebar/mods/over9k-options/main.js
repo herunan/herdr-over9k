@@ -13,7 +13,7 @@ import { props, closeOverlay, openOverlay, theme, shared, setShared, home, appHo
 
 export const DEFAULTS = { keepUpToDate: false, handoffRule: false, todos: true, todoLog: true, todoSync: false, timeline: true, claudeStatus: false, agyStatus: false, todoFile: false, layout: "expanded", model: true, effort: true, context: true, since: true, cache: true, github: true, dirty: true, sync: true, prs: true, stars: true, issues: true,
   subModel: true, subEffort: true, subContext: true, subTime: true,
-  usage: true, usageClaude: true, usageCodex: true, usageGemini: true, checkUpdates: true };
+  usage: true, usageClaude: true, usageCodex: true, usageGemini: true, usageCursor: true, usageGrok: true, checkUpdates: true };
 // The To-do panel (over9k-todos) and the `todo` command agents use.
 const TODO_ITEMS = [
   ["todos", "To-do", "The To-do panel, and agents keeping each project's list: the rule in CLAUDE.md and AGENTS.md, the todo command (~/.local/bin) and Claude Code's note on each message. Log and Sync are switched per project in the panel's header"],
@@ -48,6 +48,8 @@ const USAGE_ITEMS = [
   ["usageClaude", "Claude", "Needs Claude Code's session footer."],
   ["usageCodex", "Codex", "From Codex's latest session"],
   ["usageGemini", "Gemini", "Includes 3rd-party (Claude, GPT) limits. Needs Antigravity's session footer."],
+  ["usageCursor", "Cursor", "Shows the Cursor quota if enabled in data/over9k-usage.json."],
+  ["usageGrok", "Grok", "Shows the Grok quota if enabled in data/over9k-usage.json."],
 ];
 // over9k's handoff.sh as over9k installs it (relative to home): agents run it
 // by that path, so it lives outside the mod. Its --rule on|off writes or removes
