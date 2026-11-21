@@ -2556,11 +2556,13 @@ export default class Spaces extends View {
       .child(svg("mods/over9k/bot.svg").size(13))];
   }
 
-  // Starts `pin`'s agent in that space, shown; made if there's none yet.
+  // Starts `pin`'s agent in that space, shown; made if there's none yet. In the
+  // space's own folder: left out, tab.new takes the focused terminal's, which
+  // may have moved into another project.
   startIn(there, made, pin) {
     if (!there) return run("space.new", { machine: "", ...made, tab: pin.name, argv: pin.run });
     if (!there.active) run("space.select", { id: there.id });
-    run("tab.new", { space: there.id, name: pin.name, argv: pin.run });
+    run("tab.new", { space: there.id, ...(there.folder ? { folder: there.folder } : {}), name: pin.name, argv: pin.run });
   }
 
   // A computer's: in its home space, where its +'s menu starts things (homeSpace).

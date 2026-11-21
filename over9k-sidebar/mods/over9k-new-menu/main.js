@@ -259,10 +259,14 @@ export default class NewMenu extends View {
       });
   }
   // Starts it: a tab in the shown space, or, for a space not open yet, its space.
+  // An agent starts in the space's own folder (left out, tab.new takes the
+  // focused terminal's, which may have moved into another project); a CLI
+  // opens where you are, as Herdr's own new tab does.
   start(argv, name) {
     const p = props() ?? {};
-    if (p.folder) openFolder(p.folder, p.name, { name, argv }, p.machine ?? null);
-    else run("tab.new", { space: spaces().find(s => s.active)?.id, ...(argv ? { name, argv } : {}) });
+    if (p.folder) return openFolder(p.folder, p.name, { name, argv }, p.machine ?? null);
+    const space = spaces().find(s => s.active);
+    run("tab.new", { space: space?.id, ...(argv ? { name, argv, ...(space?.folder ? { folder: space.folder } : {}) } : {}) });
   }
 
   // A past session resumes in the folder it ran in (Claude Code looks it up by
