@@ -2732,6 +2732,13 @@ export default class Spaces extends View {
     for (const k of this.sel) if (!alive.has(k)) this.sel.delete(k);
     const none = this.filter && !this.frame.ag.some((a) => this.passes(a));
     return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
+      // Folded on macOS: the header hides its sidebar button there (the window's
+      // buttons fill the rail), so the rail gets one, back to the width it had.
+      .when(collapsed && window()?.platform === "macos", (el) => el.child(h_flex().h(30).flex_none().items_center().justify_center()
+        .child(h_flex().id("over9k-unfold").size(26).items_center().justify_center().rounded(6).cursor_pointer().text_color(t.muted)
+          .hover((s) => s.bg(t.hover).text_color(t.foreground))
+          .on_click(() => { setShared("sidebar.collapsed", false); run("layout.resize", { id: "sidebar", px: shared("sidebar.width") ?? 268 }); })
+          .child(svg("mods/workspace-chrome/sidebar.svg").size(15)))))
       .when(!collapsed, (el) => el.child(this.filterBar(t)))
       .when(Boolean(none), (el) => el.child(div().px(16).py(6).text_size(12).text_color(t.dim).child(FILTERS.find((f) => f.id === this.filter)?.empty ?? "")))
       .child(v_flex().id("spaces-scroll").flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")

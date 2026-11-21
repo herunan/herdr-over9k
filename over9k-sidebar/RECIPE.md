@@ -12,7 +12,8 @@ menu away.
 
 ## What you see
 
-It docks on the left, 268px wide (44 when collapsed), on `chrome`, in 13px type.
+It docks on the left, 268px wide (44 when collapsed; 76 on macOS, where the rail
+has a button at its top to unfold it), on `chrome`, in 13px type.
 All colours are theme names.
 
 - **Filter row**, 30px: **All** and **Agents N** as 20px tabs, the picked one on
