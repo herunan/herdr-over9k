@@ -2,9 +2,7 @@
 # Over9k's optional Claude Code status line (Options › Session footers › Claude Code;
 # off unless you turn it on). It shows a line under the prompt: model and effort,
 # context used, how long the prompt cache lasts (a red "exp." once it's out), and
-# the 5-hour and weekly limits as coloured percents with time to reset; inside
-# the week, a model's own weekly limit as of your last look at /usage, as
-# "week 18% (Fable 29%)". It also
+# the 5-hour and weekly limits as coloured percents with time to reset. It also
 # saves those limits (~/.cache/over9k/usage/claude.json), or that it's billed by
 # use, for Over9k's usage rows: Claude Code gives them to nothing else. Agent details don't need it (claude-info.py reads Claude Code's
 # own files). Needs jq.
@@ -68,16 +66,7 @@ fi
 # this session's own, which may be an hour old.
 saved=$(jq -c 'select(type == "object" and (has("api") | not))' "$u/claude.json" 2>/dev/null) || saved=
 [ -n "$saved" ] || saved=null
-# A model's own weekly limit (Fable's) isn't in what Claude Code hands this line.
-# Its /usage screen has it, and what that last showed is kept in ~/.claude.json:
-# shown from there while that week runs, and from an hour on with how old it is.
-models=$(jq -c '.cachedUsageUtilization as $c | [$c.utilization.limits[]?
-  | select(.kind == "weekly_scoped" and .percent != null and .scope.model.display_name != null)
-  | {name: .scope.model.display_name, used_percentage: .percent, at: (($c.fetchedAtMs // 0) / 1000 | floor),
-     resets_at: (try (.resets_at | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdate) catch 0)}
-  | select(.resets_at > now)]' "$HOME/.claude.json" 2>/dev/null) || models=
-[ -n "$models" ] || models='[]'
-printf '%s' "$in" | jq -r --argjson cache "$cache" --argjson saved "$saved" --argjson models "$models" '
+printf '%s' "$in" | jq -r --argjson cache "$cache" --argjson saved "$saved" '
   def left: (. - now) as $s | if $s <= 0 then "now"
     elif $s < 3600 then "\($s / 60 | floor)m"
     elif $s < 86400 then "\($s / 3600 | floor)h \($s % 3600 / 60 | floor)m"
@@ -89,19 +78,11 @@ printf '%s' "$in" | jq -r --argjson cache "$cache" --argjson saved "$saved" --ar
   def dim: "\u001b[2m\(.)\u001b[0m";
   # A limit: its label, the used % coloured, and the time to reset dimmed.
   def show($name): "\($name) \(.used_percentage | pct) " + ("· \(.resets_at | left)" | dim);
-  # How long ago (seconds since then): "3h ago", "2d ago".
-  def ago: (now - .) as $s | if $s < 86400 then "\($s / 3600 | floor)h ago" else "\($s / 86400 | floor)d ago" end;
-  # One model alone: "(Fable 29%)", and from an hour on how old that is: "(Fable 29%, 3h ago)".
-  def scoped: "(\(.name) \(.used_percentage | pct)" + (if now - .at >= 3600 then ", \(.at | ago)" | dim else "" end) + ")";
   [ ([.model.display_name, .effort.level] | map(select(. != null)) | join(" · ") | select(. != "")),
     (.context_window | select(.used_percentage != null)
       | "context \(.used_percentage | pct) "
         + ("(\((.current_usage | (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)) | tokens)/\(.context_window_size | tokens))" | dim)),
     ($cache | select(. != null) | if . > now then "cache " + ("\(left)" | dim) else "cache \u001b[31mexp.\u001b[0m" end),
     (select(.rate_limits != null) | ($saved.five_hour // .rate_limits.five_hour) // empty | select((.resets_at // 0) > now) | show("5h")),
-    # The week, with the weekly limit of one model alone inside it: "week 18% (Fable 29%) · 5d 22h".
-    (select(.rate_limits != null) | ($saved.seven_day // .rate_limits.seven_day) // empty | select((.resets_at // 0) > now)
-      | "week \(.used_percentage | pct) " + ($models | map(scoped + " ") | join("")) + ("· \(.resets_at | left)" | dim)),
-    # With no week to put it in, on its own.
-    (select(.rate_limits != null and (($saved.seven_day // .rate_limits.seven_day // {}).resets_at // 0) <= now) | $models[] | scoped) ]
+    (select(.rate_limits != null) | ($saved.seven_day // .rate_limits.seven_day) // empty | select((.resets_at // 0) > now) | show("week")) ]
   | join("   ")'

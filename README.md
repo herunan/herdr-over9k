@@ -81,8 +81,7 @@ The 5-hour and weekly limits of each plan you use (Claude, Codex and Gemini),
 with the plan's name, the percentage used in green, yellow from 50% or red from
 80%, and how long until it resets. Click a service to see every limit it
 reports, as bars, and click a limit to make it that service's headline instead
-of its fullest. Claude's row includes a model's own weekly limit (Fable's), as of
-the last time you opened /usage in Claude Code. Claude billed by use (Amazon Bedrock, Vertex, Foundry or an API
+of its fullest. Claude billed by use (Amazon Bedrock, Vertex, Foundry or an API
 key) has no limits, so its row names how it's billed and shows cost (an estimate
 from tokens at list prices), one row per computer: click it for tabs (30 days,
 2 weeks, 1 week, 1 day) and a chart of each day's cost by model. The tab you pick
@@ -200,8 +199,7 @@ agent that needs it, each off unless you turn it on:
 
 - **Claude Code:** needed for your 5-hour and weekly limits (billed by
   use, how it's billed, for its cost). It shows model and effort, context, how long
-  the prompt cache lasts and those limits, with Fable's own weekly limit as of your
-  last look at /usage. "Show its limits" on the Usage
+  the prompt cache lasts and those limits. "Show its limits" on the Usage
   strip turns it on too.
 - **Antigravity:** needed for the agent's context and Gemini's limits.
   It shows context and the limits per model group, under Antigravity's own.

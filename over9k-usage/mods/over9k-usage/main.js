@@ -14,9 +14,6 @@
 //                (Bedrock, Vertex, Foundry, an API key: no plan limits; claude.json says
 //                which) the row shows cost: api-cost.py next to this file, from the
 //                transcripts. Run on each machine, so one billed by use gets its own row.
-//                A model's own weekly limit (Fable's) isn't in the status line: it's
-//                read from what Claude Code's /usage screen last showed (CLAUDE_USAGE
-//                below), so it's as old as the last look at that screen (hover says).
 //   Gemini       ~/.cache/over9k/usage/antigravity.json, written by
 //                Antigravity's (over9k/antigravity/agy-statusline.sh, optional: README):
 //                gemini-* and 3p-* (Claude and GPT) buckets, and the plan.
@@ -45,15 +42,6 @@ const CODEX = `f=$(ls -t "$HOME"/.codex/sessions/*/*/*/*.jsonl 2>/dev/null | hea
 grep -o '"rate_limits":{.*' "$f" | tail -n 1 | sed 's/^"rate_limits"://' | jq -c '{plan: .plan_type, primary, secondary}' 2>/dev/null`;
 const CLAUDE_PLAN = `jq -r '.oauthAccount.planDisplayName // empty' "$HOME/.claude.json" 2>/dev/null`;
 const ACCOUNT = `grep -o '"accountUuid": *"[^"]*"' "$HOME/.claude.json" 2>/dev/null | head -n 1 | sed 's/.*"\\([^"]*\\)"$/\\1/'`;
-// What Claude Code's own /usage screen last showed, which it keeps in
-// ~/.claude.json: the account, when that was, and each limit (kind weekly_all,
-// weekly_scoped with the model it's for, or five_hour). Only read: nothing is
-// asked of Claude Code, so it's as old as the last time /usage was opened there.
-const CLAUDE_USAGE = `f="$HOME/.claude.json"; [ -f "$f" ] || exit 0
-jq -c 'def at: try (sub("\\\\.[0-9]+"; "") | sub("\\\\+00:00$"; "Z") | fromdate) catch null;
-  .cachedUsageUtilization | select(. != null) | {account: .accountUuid, at: ((.fetchedAtMs // 0) / 1000 | floor),
-  limits: ([.utilization.limits[]? | select(.percent != null) | {kind, percent, model: .scope.model.display_name, resets_at: (.resets_at | at)}]
-    + [.utilization.five_hour | select(type == "object" and .utilization != null) | {kind: "five_hour", percent: .utilization, model: null, resets_at: (.resets_at | at)}])}' "$f" 2>/dev/null`;
 // Another computer's saved limits and Claude account, a line each (empty when missing).
 const REMOTE = `u="$HOME/.cache/over9k/usage"; tr -d '\\n' 2>/dev/null < "$u/claude.json"; echo; tr -d '\\n' 2>/dev/null < "$u/antigravity.json"; echo; ${ACCOUNT}`;
 
@@ -140,8 +128,6 @@ export default class Usage extends View {
     const codex = await exec("sh", ["-c", CODEX]).then((r) => JSON.parse(r.stdout || "null")).catch(() => null);
     const agy = await readJson(`${dir}/antigravity.json`);
     this.mine = { claude, api, plan, account, codex, agy };
-    // What /usage last showed (a plan's; one billed by use has no limits).
-    this.asked = api ? null : await exec("sh", ["-c", CLAUDE_USAGE]).then((r) => JSON.parse(r.stdout || "null")).catch(() => null);
     this.build();
     this.loadMachines(cx);
   }
@@ -166,21 +152,12 @@ export default class Usage extends View {
     else {
       const sub = (x) => !x.api && !x.bedrock && (x.five_hour || x.seven_day);
       const mine = this.mine.claude && sub(this.mine.claude) ? this.mine.claude : null;
-      // Every reading of this account's limits: this computer's, the connected
-      // computers', and what /usage last showed, where that window still runs.
-      const asked = this.asked && (!account || this.asked.account === account) ? (this.asked.limits ?? []).filter((l) => l.resets_at > now) : [];
-      const reading = (kind) => { const l = asked.find((x) => x.kind === kind); return l ? { used_percentage: l.percent, resets_at: l.resets_at } : null; };
-      const seen = [mine, ...(account ? Object.values(this.remote).map((r) => r.claude).filter((x) => x && sub(x) && x.account === account) : []),
-        { five_hour: reading("five_hour"), seven_day: reading("weekly_all") }].filter(Boolean);
+      // Every reading of this account's limits: this computer's and the connected computers'.
+      const seen = [mine, ...(account ? Object.values(this.remote).map((r) => r.claude).filter((x) => x && sub(x) && x.account === account) : [])].filter(Boolean);
       const five = seen.map((x) => x.five_hour).reduce(further, null), seven = seen.map((x) => x.seven_day).reduce(further, null);
-      // A model's own weekly limit ("7d Fable"), which only /usage has: as of then.
-      const ago = this.asked ? Math.max(0, now - this.asked.at) : 0;
-      const models = asked.filter((l) => l.kind === "weekly_scoped" && l.model).map((l) => ({ ...limit(`7d ${l.model}`, l.percent, l.resets_at),
-        note: `As of ${ago < 90 ? "now" : `${left(ago)} ago`}, when /usage was last opened in Claude Code` }));
-      if (five || seven || models.length) out.push({ key: "claude", name: "Claude", plan: planName(plan), limits: [
+      if (five || seven) out.push({ key: "claude", name: "Claude", plan: planName(plan), limits: [
         five && limit("5h", five.used_percentage, five.resets_at),
         seven && limit("7d", seven.used_percentage, seven.resets_at),
-        ...models,
       ].filter(Boolean) });
     }
     if (codex) {
@@ -314,7 +291,7 @@ export default class Usage extends View {
         const top = this.headline(s);
         const p = s.days && this.period(s), sum = s.days && spendIn(s.days, p.days);
         const all = s.days ? [SPEND_TIP, ...sum.models.map((x) => `${x.name}: ${money(x.cost)}`)].join("\n")
-          : (s.limits ?? []).map((l) => `${l.label}: ${Math.round(l.used)}%${l.left != null ? `, resets in ${left(l.left)}` : ""}${l.note ? ` (${l.note.toLowerCase()})` : ""}`).join("\n");
+          : (s.limits ?? []).map((l) => `${l.label}: ${Math.round(l.used)}%${l.left != null ? `, resets in ${left(l.left)}` : ""}`).join("\n");
         return h_flex().id(`strip-${s.key}`).flex_none().gap(6).items_center().when(Boolean(all), (el) => el.tooltip(all))
           .child(div().text_color(t.muted).child(s.name))
           .when(Boolean(s.plan), (el) => el.child(div().px(5).py(1).rounded(4).bg(t.raised).text_size(10.5).text_color(t.accent).child(s.plan)))
@@ -394,7 +371,7 @@ export default class Usage extends View {
             h_flex().id(`limit-${s.key}-${l.label}`).h(LIMIT).items_center().gap(7).text_size(11.5).rounded(4).cursor_pointer()
               .hover((x) => x.bg(t.hover))
               .on_click((_e, cx) => this.pickHeadline(s.key, l.label, cx))
-              .tooltip(`${l.note ? `${l.note}\n` : ""}${l.label === this.picked[s.key] ? "Unpin as headline number" : "Pin as headline number"}`)
+              .tooltip(l.label === this.picked[s.key] ? "Unpin as headline number" : "Pin as headline number")
               .child(div().w(82).flex_none().truncate().text_color(l.label === this.picked[s.key] ? t.accent : t.muted).child(l.label))
               .child(div().flex_1().h(3).rounded(2).bg(t.raised)
                 .child(div().h(3).rounded(2).bg(this.color(t, l.used)).w(`${Math.max(l.used > 0 ? 3 : 0, l.used)}%`)))
