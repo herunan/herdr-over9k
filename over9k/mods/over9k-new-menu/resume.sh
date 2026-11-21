@@ -96,13 +96,17 @@ case "$agent" in
     exec agy ${first:+-i "$first"} ;;
   kimi)
     # Kimi Code takes no first message on its command line (-p answers once and
-    # leaves): it's typed in from beside it (hc send) once Kimi is up and idle,
-    # or after a minute as it is.
+    # leaves): it's typed in from beside it (hc send) once Kimi says it's idle.
+    # While Kimi asks something first (trust this folder?) that waits, however
+    # long the answer takes. Only ever into an idle agent: if Kimi hasn't come
+    # up idle within a minute (it didn't start, or was left), nothing is typed,
+    # as what's in the terminal then may be a shell.
     if [ -n "$first" ] && [ -n "${HC_TERMINAL_ID:-}" ] && command -v hc >/dev/null 2>&1; then
       ( n=0
-        until hc send --if idle "$HC_TERMINAL_ID" -- "$first"; do
-          n=$((n + 1))
-          [ "$n" -ge 60 ] && { hc send "$HC_TERMINAL_ID" -- "$first"; break; }
+        while [ "$n" -lt 60 ]; do
+          hc send --if idle "$HC_TERMINAL_ID" -- "$first" && break
+          # 9: it's asking something; 10: not idle (yet); else the terminal is gone.
+          case $? in 9) ;; 10) n=$((n + 1)) ;; *) break ;; esac
           sleep 1
         done ) >/dev/null 2>&1 </dev/null &
     fi
