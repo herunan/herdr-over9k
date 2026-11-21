@@ -31,7 +31,11 @@ All colours are theme names.
   - open pull requests (red when your review is wanted)
   - on your own repos, open issues and stars
 
-  Worktrees sit under their checkout with a branch icon.
+  Worktrees sit under their checkout with a branch icon. One with no space of
+  its own gets a row there too while something works in it: a Claude Code that
+  entered it (its session says so; its process stays where it started), a
+  terminal that moved there, or a helper started there (`hc run --cwd`). Those
+  list under it; its + makes a space of it.
 - **Agent rows**, 26px (compact) or 36px (expanded):
   - Status: a 12px `working` spinner, or a 7px dot in `blocked` or `done`.
     Idle has no mark and a `muted` name.

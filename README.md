@@ -18,7 +18,9 @@ folder and each repo shows up on its own, with its branch, uncommitted files,
 pull requests, open issues, stars and push/pull; pin the projects you care about and park the rest.
 Every agent shows whether it's working or needs you, its model, how full its
 context is and how long since it replied, with the subagents, background
-commands and scheduled prompts it started underneath. Links show where the work
+commands and scheduled prompts it started underneath. An agent that goes into a
+git worktree, and helpers started in one, list under that worktree, beneath its
+repo. Links show where the work
 is going, into another space or over SSH to another computer. When an agent's
 prompt cache has expired, one click clears it and restarts it from a short
 recap, instead of paying to re-read the whole chat. And a chat you started

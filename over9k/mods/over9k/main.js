@@ -309,6 +309,7 @@ export default class Spaces extends View {
     this.projects = []; // shown projects: Claude's folders + pinned - hidden (see render)
     this.auto = []; // ~/Code git repos and folders with a CLAUDE.md, AGENTS.md or .claude
     this.tops = new Map(); // a terminal's folder -> its repo's top (else itself)
+    this.wts = new Map(); // a linked worktree's top -> its repo's own .git folder
     // A shell's last command: the last prompt line ("❯ make") on its screen,
     // kept once seen (a clear wipes the screen). Shared as terminals.last for
     // the tab bar (over9k-tabs).
@@ -1018,9 +1019,15 @@ export default class Spaces extends View {
       if (!mine) continue;
       let key = mine.id;
       if (!mine.machine && p.cwd) {
-        const cwd = trim(p.cwd) || "/";
+        const cwd = this.worksIn(p.terminal, trim(p.cwd) || "/");
         const best = places.filter((x) => inside(cwd, x.dir)).sort((a, b) => b.dir.length - a.dir.length)[0];
-        if (best) key = best.key;
+        // Further in than its place: maybe in a worktree there (<repo>/.claude/worktrees/<name>).
+        if (best && cwd !== best.dir && !this.tops.has(cwd)) this.wantTops.add(cwd);
+        const top = this.tops.get(cwd);
+        // In a linked worktree of a repo that has a space, with no space of its
+        // own: that worktree's row, drawn under the repo's space (worktreeRows).
+        if (top && top !== best?.dir && (!best || inside(top, best.dir)) && this.mainOf(top, sp)) key = `d:${top}`;
+        else if (best) key = best.key;
         else if (cwd === homeDir()) key = homeSpace?.id ?? mine.id;
         else {
           // Anywhere else: a row for that folder (its repo, once known).
@@ -1032,6 +1039,31 @@ export default class Spaces extends View {
       groups.get(key).push({ p, space: mine, tab: mine.tabs.find((x) => x.id === p.tab) });
     }
     return groups;
+  }
+
+  // The folder a terminal's program works in: its process's (`cwd`), unless it's a
+  // Claude Code that entered a worktree. That one's process stays where it
+  // started, and its session says where it is (claude-info.py). Only a linked
+  // worktree is taken from there: a shell command's folder comes and goes.
+  worksIn(address, cwd) {
+    const said = (this.info[address]?.cwd ?? "").replace(/\/+$/, "");
+    if (!said || said === cwd) return cwd;
+    if (!this.tops.has(said)) this.wantTops?.add(said);
+    return this.wts.has(this.tops.get(said)) ? said : cwd;
+  }
+
+  // The space on this computer that is the main checkout of a linked worktree
+  // (its top), if one is open: the worktree's row goes under that space's.
+  mainOf(top, sp = this.frame.sp) {
+    const common = this.wts.get(top);
+    if (!common) return null;
+    const repo = JSON.stringify([null, common]);
+    return sp.find((s) => { const g = !s.machine && s.folder ? this.git[where(s)] : null; return g && !g.linked && g.repo === repo; }) ?? null;
+  }
+
+  // A worktree with no space of its own, as the place something works in (workSpace).
+  wtSpace(top) {
+    return { id: `d:${top}`, folder: top, machine: null, worktree: true };
   }
 
   // A row's terminals: status, icon, name, and for an agent its model · effort ·
@@ -1361,13 +1393,24 @@ export default class Spaces extends View {
   // machine, project }, its row then lifted into the list, lifted()).
   workSpace(address) {
     const p = this.frame.ps.find((x) => x.terminal === address);
-    if (p) return this.frame.sp.find((s) => (s.tabs ?? []).some((tb) => tb.id === p.tab)) ?? null;
+    if (p) {
+      // One listed under a worktree's row (assign) counts as there.
+      const key = this.frame.keyOf?.get(p.pane);
+      if (key?.startsWith("d:") && this.mainOf(key.slice(2))) return this.wtSpace(key.slice(2));
+      return this.frame.sp.find((s) => (s.tabs ?? []).some((tb) => tb.id === p.tab)) ?? null;
+    }
     const k = (this.frame.terms ?? []).find((x) => x.address === address);
-    const m = address.includes("/") ? address.split("/")[0] : null, cwd = (k?.cwd ?? "").replace(/\/+$/, "");
-    if (!cwd) return null;
+    const m = address.includes("/") ? address.split("/")[0] : null, at = (k?.cwd ?? "").replace(/\/+$/, "");
+    if (!at) return null;
+    const cwd = m ? at : this.worksIn(address, at);
     const open = this.frame.sp.filter((s) => (s.machine ?? null) === m && s.folder && inside(cwd, s.folder.replace(/\/+$/, "")));
     const closed = this.closedOn(m).filter((d) => inside(cwd, d)).map((d) => ({ id: m ? `r:${m}:${d}` : `c:${d}`, folder: d, machine: m, project: true }));
-    return [...open, ...closed].sort((a, b) => b.folder.replace(/\/+$/, "").length - a.folder.replace(/\/+$/, "").length)[0] ?? null;
+    // Or a worktree of a repo with a space here, the worktree having none
+    // (hc run --cwd <worktree>): its row is under that space's (worktreeRows).
+    if (!m && !this.tops.has(cwd)) this.wantTops?.add(cwd);
+    const top = m ? null : this.tops.get(cwd);
+    const wt = top && this.mainOf(top) ? [this.wtSpace(top)] : [];
+    return [...open, ...closed, ...wt].sort((a, b) => b.folder.replace(/\/+$/, "").length - a.folder.replace(/\/+$/, "").length)[0] ?? null;
   }
 
   // Pinned projects with no open space, here (closedProjects) or on computer `m`
@@ -1869,8 +1912,12 @@ export default class Spaces extends View {
     this.resolving = true;
     cx.spawn(async (cx) => {
       for (const c of want) {
-        const r = await exec("git", ["rev-parse", "--show-toplevel"], { cwd: c }).catch(() => null);
-        this.tops.set(c, r?.code === 0 ? r.stdout.trim() : c);
+        // Its top, and whether that's a linked worktree: its own git folder
+        // (<repo>/.git/worktrees/<name>) then isn't the repo's.
+        const r = await exec("git", ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "--git-dir"], { cwd: c }).catch(() => null);
+        const [top, common, own] = r?.code === 0 ? r.stdout.trim().split("\n") : [];
+        this.tops.set(c, top || c);
+        if (top && common && own && own !== common) this.wts.set(top, common);
       }
       this.resolving = false;
       cx.notify();
@@ -1888,7 +1935,8 @@ export default class Spaces extends View {
   // other folder in plain white right after ~ (right-click to pin it).
   looseRows(t, collapsed, projects) {
     const listed = new Set(this.projects);
-    return this.loose.filter((d) => listed.has(d) === projects).flatMap((dir) => {
+    // (A worktree of a repo with a space is under that space's row: worktreeRows.)
+    return this.loose.filter((d) => listed.has(d) === projects && !this.mainOf(d)).flatMap((dir) => {
       const key = `d:${dir}`, name = this.alias(dir), g = this.git[JSON.stringify([null, dir])] ?? null;
       this.vis.push(key);
       const folded = this.agentsFolded.has(key);
@@ -1918,6 +1966,59 @@ export default class Spaces extends View {
           .child(this.plusButton(`loose-add-${name}`, this.hoverSpace === key, t, () => this.openProject(dir))));
       return [row, ...(collapsed || folded ? [] : this.termRows(key, t))];
     });
+  }
+
+  // Linked worktrees something works in now and that have no space of their own,
+  // each with the space of its repo's main checkout: a terminal that moved there
+  // (assign), or what an agent started there (hc run --cwd <worktree>). Once a render.
+  busyWorktrees() {
+    if (this.frame.wtBusy) return this.frame.wtBusy;
+    const busy = new Map();
+    for (const d of this.loose ?? []) { const main = this.mainOf(d); if (main) busy.set(d, main.id); }
+    for (const k of this.frame.terms ?? []) {
+      if (!k.parent || k.state !== "live" || k.address.includes("/") || this.frame.ps.some((p) => p.terminal === k.address)) continue;
+      const at = this.workSpace(k.address);
+      if (at?.worktree && !busy.has(at.folder)) busy.set(at.folder, this.mainOf(at.folder)?.id);
+    }
+    return (this.frame.wtBusy = busy);
+  }
+
+  // Those of space `r`'s repo, each a row under the space's like a worktree
+  // space's (branch icon, its folder's name), with what works there under it: its
+  // terminals, and what agents elsewhere started there. A click folds them, the +
+  // makes a space of it. With a filter on, only ones holding an agent it shows.
+  worktreeRows(r, t) {
+    if (r.w.machine || !r.g || r.g.linked) return [];
+    const on = Boolean(this.filter);
+    return [...this.busyWorktrees()].filter(([d, main]) => main === r.w.id && (!on || this.spaceMatches(`d:${d}`))).map(([d]) => d)
+      .sort((a, b) => base(a).localeCompare(base(b), undefined, { sensitivity: "base" })).flatMap((dir) => {
+        const key = `d:${dir}`, name = this.alias(dir), g = this.git[JSON.stringify([null, dir])] ?? null;
+        this.vis.push(key);
+        const folded = this.agentsFolded.has(key) && !on;
+        const row = h_flex().id(`worktree-${dir}`).h(rowHeight({ tree: true })).flex_none().px(8).gap(9).items_center().rounded(8)
+          .hover((s) => s.bg(t.hover))
+          .when(this.sel.has(key), (el) => el.bg(t.accent + "38"))
+          .on_hover((over, cx) => { if (over) this.hoverSpace = key; else if (this.hoverSpace === key) this.hoverSpace = null; cx.notify(); })
+          .on_mouse_down("right", () => this.rightClick(key, () => this.folderMenu(dir)))
+          .on_click((e, cx) => {
+            if (multi(e)) return this.pick(key, cx, e);
+            this.sel.clear();
+            this.anchor = key;
+            this.agentsFolded.has(key) ? this.agentsFolded.delete(key) : this.agentsFolded.add(key);
+            localStorage.setItem("agents.folded", JSON.stringify([...this.agentsFolded]));
+            cx.notify();
+          })
+          .child(h_flex().flex_none().pl(16).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
+          .child(div().flex_shrink(0).max_w(150).truncate().text_color(this.spaceColor(r.w, t) ?? t.foreground).child(name))
+          // Its own files and commits; the repo's pull requests, issues and stars are on the space's row.
+          .when(Boolean(g), (el) => el.children(this.counts({ ...g, slug: null }, t, (cx) => this.showChanges({ name, folder: dir }, cx))))
+          .child(h_flex().w(FOLD).flex_none().items_center().justify_center()
+            .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(10).text_color(t.dim).opacity(this.hoverSpace === key ? 1 : 0)))
+          .child(this.tail(g, true, name, t, this.hoverSpace === key && dir))
+          .children(this.closedBot(dir, t, null, key))
+          .child(this.plusButton(`worktree-add-${dir}`, this.hoverSpace === key, t, () => this.openProject(dir)));
+        return [row, ...(folded ? [] : [...this.termRows(key, t, TREE), ...(on ? [] : this.visitorRows(this.wtSpace(dir), t, TREE))])];
+      });
   }
 
   // Projects with no space on this computer made there or with a terminal in it now.
@@ -2221,11 +2322,15 @@ export default class Spaces extends View {
     if (this.filter === "agents" && this.agentsBy === "state" && !collapsed) return this.agentSections(t, rows);
     // A worktree folds away with its main space (under).
     const on = Boolean(this.filter);
-    const draw = (r) => (on && !this.spaceMatches(r.w.id) ? [] : r.under && this.agentsFolded.has(r.under) && !on ? [] : collapsed ? [this.compact(r, t)] : [this.row(r, t), ...(this.agentsFolded.has(r.w.id) && !on ? [] : this.termRows(r.w.id, t, r.tree ? TREE : 0)),
+    // With a filter on, a space also stays for an agent in one of its worktrees.
+    const inWorktree = (r) => on && [...this.busyWorktrees()].some(([d, main]) => main === r.w.id && this.spaceMatches(`d:${d}`));
+    const draw = (r) => (on && !this.spaceMatches(r.w.id) && !inWorktree(r) ? [] : r.under && this.agentsFolded.has(r.under) && !on ? [] : collapsed ? [this.compact(r, t)] : [this.row(r, t), ...(this.agentsFolded.has(r.w.id) && !on ? [] : this.termRows(r.w.id, t, r.tree ? TREE : 0)),
       // Another computer's space: this computer's agents connected and working in it.
       ...(r.w.machine && r.w.folder && !on ? this.sshRows(r.w.machine, t, r.w.folder.replace(/\/+$/, "")) : []),
       // Sub-agents started elsewhere that are working in this space.
-      ...(this.agentsFolded.has(r.w.id) || on ? [] : this.visitorRows(r.w, t, r.tree ? TREE : 0))]);
+      ...(this.agentsFolded.has(r.w.id) || on ? [] : this.visitorRows(r.w, t, r.tree ? TREE : 0)),
+      // Worktrees of its repo that something works in, without a space of their own.
+      ...(this.agentsFolded.has(r.w.id) && !on ? [] : this.worktreeRows(r, t))]);
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].sort();
     const loading = m => {
       const layout = this.frame.ms.find(k => k.name === m)?.layout;
@@ -2712,7 +2817,8 @@ export default class Spaces extends View {
     const ps = panes(), ag = agents();
     this.projects = this.listed();
     if (this.projects.join("\n") !== this.shared) { this.shared = this.projects.join("\n"); setShared("projects.listed", this.projects); }
-    this.frame = { sp, ps, ag, terms: terminals(), colors: kept, ms: machines(), names: shared("projects.names") ?? {}, options: { ...OPTIONS, ...(shared("sidebar.options") ?? {}) }, byPane: new Map(ag.map((a) => [a.pane, a])), groups: this.assign(sp, ps) };
+    const groups = this.assign(sp, ps);
+    this.frame = { sp, ps, ag, terms: terminals(), colors: kept, ms: machines(), names: shared("projects.names") ?? {}, options: { ...OPTIONS, ...(shared("sidebar.options") ?? {}) }, byPane: new Map(ag.map((a) => [a.pane, a])), groups, keyOf: new Map([...groups].flatMap(([k, list]) => list.map(({ p }) => [p.pane, k]))) };
     // Picked sub-rows closed from the selection menu (over9k-menu): once each.
     const closing = shared("over9k.closeSubs");
     if (closing?.at && closing.at !== this.closedAt) { this.closedAt = closing.at; this.closeSubs(closing.list ?? []); this.sel.clear(); }

@@ -6,7 +6,9 @@
 #   ~/.claude/projects/<folder>/<session>.jsonl   its conversation: model, effort
 #                                   (the last API request), context (the last reply's
 #                                   input tokens), when the prompt cache runs out,
-#                                   when it last replied, ultracode
+#                                   when it last replied, ultracode, and the folder
+#                                   it works in now (a worktree it entered: its
+#                                   process stays where it started)
 # Writes ~/.cache/over9k/agents/<terminal>.json for each (only when it changed) and
 # prints them all as one JSON object keyed by terminal. Python 3, standard library.
 import glob, json, os, re, subprocess, sys, time
@@ -99,11 +101,20 @@ def read(path):
         lines = lines[1:]
     reply = request = None
     ultra = None
+    cwd = None
     for raw in reversed(lines):
-        if reply and request and ultra is not None:
+        if reply and request and ultra is not None and cwd is not None:
             break
         if not raw.strip():
             continue
+        if cwd is None and b'"cwd":"' in raw:
+            # The session's folder as of its last entry (not a subagent's own).
+            try:
+                j = json.loads(raw)
+            except Exception:
+                j = {}
+            if isinstance(j.get("cwd"), str) and j["cwd"] and not j.get("isSidechain"):
+                cwd = j["cwd"]
         if ultra is None and b"Ultracode o" in raw and b'"content":"<local-command-stdout>' in raw:
             # Only /effort's own output counts: a user entry whose content is
             # the command's stdout as a plain string. The same words inside a
@@ -126,7 +137,7 @@ def read(path):
                 reply = j
             elif j.get("type") == "api-request" and request is None and j.get("querySource", "repl_main_thread") == "repl_main_thread":
                 request = j
-    info = {"model": None, "id": None, "effort": None, "ultracode": bool(ultra), "lastAt": None, "context": None, "cacheUntil": None, "transcript": path}
+    info = {"model": None, "id": None, "effort": None, "ultracode": bool(ultra), "lastAt": None, "context": None, "cacheUntil": None, "transcript": path, "cwd": cwd}
     params = (request or {}).get("params") or {}
     mid = params.get("model") or ((reply or {}).get("message") or {}).get("model")
     info["id"] = mid
