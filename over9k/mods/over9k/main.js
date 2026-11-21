@@ -1270,19 +1270,22 @@ export default class Spaces extends View {
     this.view(file, addr, "subagent-view.sh", [file], cx, title, e);
   }
 
-  // Sub-agents (hc run, no pane of their own) working in space `w` while
-  // their parent is somewhere else: listed here too, "from <parent>", with
-  // their status; a click peeks at one. Only while they run. They also stay
-  // under their parent (subRows).
+  // What an agent started (hc run) working in space `w` while that agent is
+  // somewhere else: listed here too, "from <parent>", with its status. Only
+  // while it runs. It also stays under its parent (subRows). Most have no pane,
+  // and a click peeks at one; one given a tab of its own here (termRows leaves
+  // it out, as something an agent started) is listed the same, and a click goes
+  // to its pane.
   visitorRows(w, t, indent = 0) {
     const m = w.machine ?? null, folder = (w.folder ?? "").replace(/\/+$/, "");
     if (!folder) return [];
     const at = (addr) => (addr.includes("/") ? addr.split("/")[0] : null);
-    // Without a pane, working here while what started it counts as elsewhere
-    // (an agent of an agent working where that one does is listed under it).
+    // Working here while what started it counts as elsewhere (an agent of an
+    // agent working where that one does is listed under it).
     const here = (this.frame.terms ?? []).filter((k) => k.parent && k.state === "live" && k.cwd && at(k.address) === m
-      && !this.frame.ps.some((p) => p.terminal === k.address) && this.workSpace(k.address)?.id === w.id && this.workSpace(k.parent)?.id !== w.id);
+      && this.workSpace(k.address)?.id === w.id && this.workSpace(k.parent)?.id !== w.id);
     return here.map((k) => {
+      const own = this.frame.ps.find((p) => p.terminal === k.address);
       const ka = this.frame.ag.find((x) => x.address === k.address) ?? (k.program?.agent || isAgentProgram(k.agent) ? k : null);
       const kind = ka || k.program?.agent ? "agent" : "process";
       const c = this.linkColor(k.address);
@@ -1290,7 +1293,8 @@ export default class Spaces extends View {
       return lit(h_flex().id(`visit-${k.address}`), (this.hoverLink?.visitor === k.address || this.hoverLink?.parent === k.parent) && { color: c })
         .on_hover((h, cx) => { if (h) this.hoverLink = { color: c, source: k.address }; else if (this.hoverLink?.source === k.address) this.hoverLink = null; cx.notify(); })
         .h(26).flex_none().pl(4 + indent).pr(8).gap(8).items_center().rounded(7)
-        .hover((s) => s.bg(t.hover)).on_mouse_down("left", (e, cx) => this.subClick(e, cx, `k:${k.address}`, () => this.showSub(k.address, false, this.helperTitle(k.address) || k.name || (ka && agentTask(ka, k.cwd)) || appName(ka) || k.program?.name || k.agent, e)))
+        .hover((s) => s.bg(t.hover)).on_mouse_down("left", (e, cx) => this.subClick(e, cx, `k:${k.address}`, () => own && !e?.modifiers?.alt ? this.goTo(own.pane)
+          : this.showSub(k.address, false, this.helperTitle(k.address) || k.name || (ka && agentTask(ka, k.cwd)) || appName(ka) || k.program?.name || k.agent, e)))
         .child(h_flex().flex_none().gap(4).items_center()
           .child(h_flex().w(16).flex_none().justify_center().when(Boolean(ka), (el) => el.child(this.mark(ka, t))))
           .child(kind === "process" ? svg(CPU).size(14).flex_none().text_color(t.foreground) : progIcon((ka ?? k).program, t, 14)))
@@ -2482,6 +2486,9 @@ export default class Spaces extends View {
       .when(on, (el) => el.bg(t.selected))
       .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
       .when(this.sel.has(`s:${w.id}`) || this.allPicked(w), (el) => el.bg(t.accent + "38"))
+      // Folded, so what works in it from elsewhere isn't listed (visitorRows): the
+      // row itself is lit while one of those is hovered under the agent that started it.
+      .when(Boolean(this.agentsFolded.has(w.id) && this.hoverLink?.color && this.hoverLink.visitor && this.workSpace(this.hoverLink.visitor)?.id === w.id), (el) => el.bg(this.hoverLink.color + "26"))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
         div().absolute().left(0).right(0).h(2).bg(t.accent)
