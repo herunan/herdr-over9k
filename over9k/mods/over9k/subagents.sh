@@ -25,7 +25,7 @@ cachedir="${XDG_CACHE_HOME:-$HOME/.cache}/over9k"; mkdir -p "$cachedir"
 cache="$cachedir/subagents-$(printf '%s' "$1" | cksum | cut -d ' ' -f 1)"
 stamp() { stat -c '%Y %s' "$1" 2>/dev/null || stat -f '%m %z' "$1" 2>/dev/null; }
 # Bump v when this script changes, so cached answers (and states) from the old one go.
-v=6
+v=7
 newest=$(ls -t "$dir"/*.jsonl 2>/dev/null | head -n 1)
 key="v$v $(stamp "$1") $(stamp "$newest") $((now / 60))"
 if [ -f "$cache" ] && [ "$(head -n 1 "$cache")" = "$key" ]; then tail -n +2 "$cache"; exit 0; fi
@@ -106,9 +106,11 @@ if [ -f "$1" ]; then
       | ( (scan("<task-id>[a-z0-9]*</task-id>.{0,600}") | select(test("finished</summary>|<status>(killed|failed|stopped)</status>")) | capture("^<task-id>(?<i>[a-z0-9]*)").i),
           (scan("Successfully stopped task: [a-z0-9]*") | split(" ")[3]),
           (scan("agent-message from=\\\\\"[a-z0-9]*") | sub(".*\""; "")),
-          # A teammate stopped: its own task id, so it is keyed by its description.
-          (try (fromjson | .. | objects | select(.task_type? == "in_process_teammate" and ((.message? // "") | startswith("Successfully stopped task: ")))
-            | "desc:" + (.command // "" | @base64)) catch empty) )
+          # A teammate stopped: its own task id, so it is keyed by its description
+          # (only lines that name one are read as JSON again; a stop with no
+          # description says nothing about which one, and is no signal).
+          (select(test("in_process_teammate")) | try (fromjson | .. | objects | select(.task_type? == "in_process_teammate" and ((.message? // "") | startswith("Successfully stopped task: ")))
+            | (.command // "") | select(. != "") | "desc:" + @base64) catch empty) )
       | "\(.) \($t)"' 2>/dev/null
     } > "$state.$$" && mv -f "$state.$$" "$state" || break
     off=$((off + n))
@@ -179,7 +181,7 @@ awk -v now="$now" -v v="$v" -v S="$w.stat" -v M="$w.meta" -v F="$w.fin" -v E="$s
   { b = $0; id = b; sub(/.*\//, "", id); sid = id; sub(/^agent-/, "", sid)
     split(row[id "|" st[b]], x, "|"); last = x[8]; if (last == "") last = 0
     d = 0; if (sid in said && last + 0 <= said[sid] + 5) d = 1
-    k = "desc:" tm[b]; if (!d && (b in tm) && (k in said) && last + 0 <= said[k] + 5) d = 1
+    if (!d && (b in tm) && tm[b] != "") { k = "desc:" tm[b]; if ((k in said) && last + 0 <= said[k] + 5) d = 1 }
     if (fin[b]) d = 1
     t = (b in at) ? at[b] : 0
     if (!d && now - t > 120 && x[9] == "0") d = 1
