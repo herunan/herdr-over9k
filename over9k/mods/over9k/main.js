@@ -100,7 +100,7 @@ const MARKED = `{ for d in "$@"; do case "$d" in "~") d=$HOME ;; "~/"*) d="$HOME
 // is a project and hand-offs (handoff.sh) make new ones. Unset, Projects is the
 // folder that computer's CLAUDE.md/AGENTS.md name on a line about projects (a
 // `~/…` in backticks; over9k's own rule left out), else home. Prints it as typed.
-const PROJECTS_FROM_RULES = `for f in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"; do
+const PROJECTS_FROM_RULES = `for f in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.pi/agent/AGENTS.md" "\${KIMI_CODE_HOME:-$HOME/.kimi-code}/AGENTS.md"; do
   [ -f "$f" ] && sed '/<!-- over9k:handoff -->/,/<!-- \\/over9k:handoff -->/d' "$f"
 done | grep -i 'project' | grep -oE '\`~/[^\` ]+\`' | tr -d '\`' | sed 's#/*$##' | while read -r d; do
   [ -d "$HOME/\${d#"~/"}" ] && { printf '%s' "$d"; break; }

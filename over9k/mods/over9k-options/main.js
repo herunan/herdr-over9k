@@ -51,9 +51,9 @@ const USAGE_ITEMS = [
 ];
 // over9k's handoff.sh as over9k installs it (relative to home): agents run it
 // by that path, so it lives outside the mod. Its --rule on|off writes or removes
-// the marked hand-off block in ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md and
-// ~/.pi/agent/AGENTS.md; only the switch below (or changing a folder while it's
-// on) runs it.
+// the marked hand-off block in ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md,
+// ~/.pi/agent/AGENTS.md and ~/.kimi-code/AGENTS.md; only the switch below (or
+// changing a folder while it's on) runs it.
 const HANDOFF_SCRIPT = ".local/share/over9k/handoff.sh";
 // What Hand off project work does (on this computer or another).
 const HANDOFF = "Chats outside a project pass project work to a new agent in it. Adds a rule to CLAUDE.md and AGENTS.md";

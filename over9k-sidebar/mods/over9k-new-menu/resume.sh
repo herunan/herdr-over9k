@@ -94,5 +94,19 @@ case "$agent" in
   antigravity)
     [ -n "$id" ] && exec agy --conversation "$id"
     exec agy ${first:+-i "$first"} ;;
+  kimi)
+    # Kimi Code takes no first message on its command line (-p answers once and
+    # leaves): it's typed in from beside it (hc send) once Kimi is up and idle,
+    # or after a minute as it is.
+    if [ -n "$first" ] && [ -n "${HC_TERMINAL_ID:-}" ] && command -v hc >/dev/null 2>&1; then
+      ( n=0
+        until hc send --if idle "$HC_TERMINAL_ID" -- "$first"; do
+          n=$((n + 1))
+          [ "$n" -ge 60 ] && { hc send "$HC_TERMINAL_ID" -- "$first"; break; }
+          sleep 1
+        done ) >/dev/null 2>&1 </dev/null &
+    fi
+    [ -n "$id" ] && exec kimi --session "$id"
+    exec kimi ;;
 esac
 printf 'No way to start a %s session.\n' "$agent"

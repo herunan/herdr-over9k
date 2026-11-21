@@ -48,7 +48,7 @@ device and all its spaces.
 
 A to-do list for every project, kept by you and your agents together. Agents get
 a `todo` command and a short rule (in CLAUDE.md for Claude Code, AGENTS.md for
-Codex and Pi). With **Log** on, they add what you ask for the moment you ask it,
+Codex, Pi and Kimi Code). With **Log** on, they add what you ask for the moment you ask it,
 reword an item when you change your mind, and tick it off once it's done and
 checked. Turn on **Sync** and the list stays in step with the project's own
 TODO.md. Lines in a project's TODO.md that aren't on the list yet show up as
@@ -214,7 +214,7 @@ Over9k's key bindings into `keys.json`. Your earlier `keys.json` is kept as
 uninstall.
 
 For Claude Code, and only if you say yes, it sets up two things:
-- The to-do rule in `~/.claude/CLAUDE.md` (and in Codex's and Pi's `AGENTS.md`),
+- The to-do rule in `~/.claude/CLAUDE.md` (and in Codex's, Pi's and Kimi Code's `AGENTS.md`),
   plus the `todo` command in `~/.local/bin`.
 - A hook that reminds agents when request logging is on.
 

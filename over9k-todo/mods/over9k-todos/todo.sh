@@ -19,9 +19,10 @@
 # small wrapper that runs this file (todo-cross.py is found next to it).
 set -e
 # The agents' rule (Options › To-do turns it on and off), between markers so it
-# can be taken out again exactly: in CLAUDE.md, Codex's and Pi's AGENTS.md.
+# can be taken out again exactly: in CLAUDE.md, Codex's, Pi's and Kimi Code's
+# AGENTS.md.
 if [ "${1:-}" = --rule ]; then
-  for f in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"; do
+  for f in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.pi/agent/AGENTS.md" "${KIMI_CODE_HOME:-$HOME/.kimi-code}/AGENTS.md"; do
     [ -d "$(dirname "$f")" ] || continue
     if [ -f "$f" ]; then
       tmp="$f.over9k.$$"

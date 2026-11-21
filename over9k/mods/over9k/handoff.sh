@@ -8,7 +8,8 @@
 #     message. --from is the agent handing off (default: the one running this).
 #   handoff.sh --list    the spaces it can hand off to
 #   handoff.sh --rule on|off   add or remove the hand-off rule in each agent's
-#                        global instructions (CLAUDE.md, AGENTS.md)
+#                        global instructions (CLAUDE.md; Codex's, Pi's and
+#                        Kimi Code's AGENTS.md)
 # Chats, Projects and this computer's spaces come from Over9k, which writes them
 # to locations.json and spaces.json next to this script.
 DATA="$HOME/.local/share/over9k"
@@ -47,7 +48,7 @@ case "${1:-}" in
     exit 0 ;;
   --rule)
     # Every agent's file, installed or not yet: the rule is there when it is.
-    for f in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"; do
+    for f in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.pi/agent/AGENTS.md" "${KIMI_CODE_HOME:-$HOME/.kimi-code}/AGENTS.md"; do
       [ "${2:-}" = on ] && mkdir -p "$(dirname "$f")"
       [ -d "$(dirname "$f")" ] || continue
       if [ -f "$f" ]; then
@@ -83,11 +84,13 @@ dir=${dir%/}
 mkdir -p "$dir" || exit 1
 
 # The agent handing off: its program, and its model when that's not its usual one
-# (Claude Code's status line file says; Pi's footer does).
+# (Claude Code's status line file says; Pi's footer does). One hc doesn't name
+# (a plain terminal, or an agent resume.sh can't start) hands off to Claude Code.
 app=$(hc ls --json 2>/dev/null | jq -r --arg t "$from" '[.terminals[]? | select(.address == $t)][0].agent // empty')
 model=""
 case "$app" in
   codex) agent=codex ;;
+  kimi|kimi-code|kimicodecli) agent=kimi ;;
   pi) agent=pi
       model=$(hc read "$from" --lines 8 2>/dev/null | grep -oE '[^ ]+ • [^ ]+[[:space:]]*$' | tail -n 1 | cut -d ' ' -f 1) ;;
   *) agent=claude
@@ -95,7 +98,7 @@ case "$app" in
      case "$id" in claude-*|"") ;; *) model=$id ;; esac ;;
 esac
 [ -n "$brief" ] || brief="This was handed off from a chat. Ask me what we're working on."
-case "$agent" in codex) name=Codex ;; pi) name=Pi ;; *) name="Claude Code" ;; esac
+case "$agent" in codex) name=Codex ;; pi) name=Pi ;; kimi) name=Kimi ;; *) name="Claude Code" ;; esac
 
 if command -v herdr-app >/dev/null 2>&1 && herdr-app status >/dev/null 2>&1; then
   # Herdr runs here: its space on that folder, else a new one.
