@@ -45,7 +45,7 @@ const PAGES = [["folders", "Folders"], ["spaces", "Space rows"], ["agents", "Age
 // The usage section above Settings (over9k-usage): whether it shows, and which services.
 const USAGE_ITEMS = [
   ["usage", "Show usage", "Limits per service, above Settings"],
-  ["usageClaude", "Claude", "Needs Claude Code's session footer."],
+  ["usageClaude", "Claude", "Needs Claude Code's session footer. Fable's own weekly limit is as of your last look at /usage."],
   ["usageCodex", "Codex", "From Codex's latest session"],
   ["usageGemini", "Gemini", "Includes 3rd-party (Claude, GPT) limits. Needs Antigravity's session footer."],
 ];

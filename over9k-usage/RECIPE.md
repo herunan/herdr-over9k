@@ -36,7 +36,15 @@ yellow or red, with when it resets. Hover a service to see every limit.
   - **Claude:** `~/.cache/over9k/usage/claude.json`, `{at, five_hour,
     seven_day}`, plus the plan name from `~/.claude.json`. Claude Code only
     hands its limits to a status line, so this file comes from Over9k's
-    optional one, `claude-statusline.sh`. Billed by use it holds
+    optional one, `claude-statusline.sh`. Every session saves there, each
+    with the limits of its own last reply, so a limit is only replaced by one
+    further on: a later window, or the same window with as much used or more.
+    A model's own weekly limit ("7d Fable") isn't in the status line: it's
+    read from what Claude Code's /usage screen last showed, which Claude Code
+    keeps in `~/.claude.json` (`cachedUsageUtilization.utilization.limits`).
+    Nothing is asked of Claude Code, so that limit is as old as the last look
+    at /usage (its hover text says how old), and it goes once its week is
+    over. Billed by use it holds
     `{at, "api": "Bedrock"}`. The cost comes from `api-cost.py`, run on that
     computer: every transcript's tokens at list prices, once per `requestId`,
     with parsed files cached in `usage/api-cost-cache.json`.
