@@ -18,7 +18,7 @@ now=$(date +%s)
 dir="${XDG_CACHE_HOME:-$HOME/.cache}/over9k"; mkdir -p "$dir"
 cache="$dir/tasks-$(printf '%s' "$1" | cksum | cut -d ' ' -f 1)"
 # Bump v when this script changes, so cached answers (and states) from the old one go.
-v=7
+v=8
 key="v$v $(stat -c '%Y %s' "$1" 2>/dev/null || stat -f '%m %z' "$1") $((now / 60))"
 if [ -f "$cache" ] && [ "$(head -n 1 "$cache")" = "$key" ]; then tail -n +2 "$cache"; exit 0; fi
 
@@ -85,8 +85,10 @@ while [ "$off" -lt "$size" ]; do
   { echo "v$v $((off + n)) $start"
     rest "$state"
     # Bytes, not characters (LC_ALL=C): the same matches, and some grep (ugrep)
-    # takes a second just to set up .{0,600} in a UTF-8 locale.
-    { LC_ALL=C grep -o '<task-id>[a-z0-9]*</task-id>.\{0,600\}' "$chunk.f" | LC_ALL=C grep -E '<status>|Monitor expired' | grep -o '^<task-id>[a-z0-9]*' | cut -c10-
+    # takes a second just to set up .{0,600} in a UTF-8 locale. The 600 is written
+    # as 255 + 255 + 90: macOS's grep refuses a repeat count over 255, and with its
+    # error unseen no task ever ended there.
+    { LC_ALL=C grep -o '<task-id>[a-z0-9]*</task-id>.\{0,255\}.\{0,255\}.\{0,90\}' "$chunk.f" | LC_ALL=C grep -E '<status>|Monitor expired' | grep -o '^<task-id>[a-z0-9]*' | cut -c10-
       LC_ALL=C grep -o 'Successfully stopped task: [a-z0-9]*' "$chunk.f" | cut -d' ' -f4; } 2>/dev/null | sed 's/^/E /'
     LC_ALL=C grep -o '/[^ "\\<]*/tasks/[a-z0-9]*\.output' "$chunk.f" 2>/dev/null | tail -n 1 | sed 's|/[^/]*$||; s/^/O /'
     LC_ALL=C grep -E '"name":"(Bash|Monitor|CronCreate|CronDelete|ScheduleWakeup)"|backgroundTaskId|"taskId":"|humanSchedule|scheduledFor' "$chunk.f" 2>/dev/null | jq -cR '
