@@ -1,7 +1,7 @@
 #!/bin/sh
 # Cuts a release of Over9k: tools/release.sh 0.2.0
 # Run it on main with everything committed, after writing what's new under a
-# "## 0.2.0" heading in CHANGELOG.md (Over9k help & options shows those entries
+# "## 0.2.0" heading in CHANGELOG.md (rename "## Unreleased" to it) (Over9k help & options shows those entries
 # with its Update button). It writes VERSION, commits it as "Release 0.2.0" and
 # tags that commit v0.2.0. Nothing is pushed: it ends by saying how.
 # Installs follow the newest v* tag on main (over9k-footer's check), so a commit

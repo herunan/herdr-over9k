@@ -1,6 +1,7 @@
 // Over9k: the sidebar's spaces, terminals and agents in one list (help and
 // options: over9k-options). Workspace spaces: stable colored avatars, worktrees under their checkout,
-// grouped by computer (This computer always has its heading). After a space's name, the repo
+// grouped by computer (This computer always has its heading). Folded to its rail
+// (the sidebar button), the same list small: avatars, and agents as icons. After a space's name, the repo
 // its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
 // switch, right-click for its menu, drag to reorder.
 // Projects are git repos in the projects folder (Options › Folders) and folders with a CLAUDE.md,
@@ -1950,6 +1951,9 @@ export default class Spaces extends View {
       const key = `d:${dir}`, name = this.alias(dir), g = this.git[JSON.stringify([null, dir])] ?? null;
       this.vis.push(key);
       const folded = this.agentsFolded.has(key);
+      // On the rail: its avatar (a project's in its colour), then its agents.
+      if (collapsed) return [this.avatar(`loose-${name}`, name, t, { color: projects ? MARK[hue(name)] : null, tip: tilde(dir) })
+        .on_mouse_down("right", () => this.folderMenu(dir)), ...this.railAgents(key, t)];
       const row = h_flex().id(`loose-${name}`).h(collapsed ? 26 : 30).flex_none().px(collapsed ? 0 : 8).gap(9).items_center().rounded(8)
         .when(collapsed, (el) => el.justify_center())
         .hover((s) => s.bg(t.hover))
@@ -2089,6 +2093,13 @@ export default class Spaces extends View {
     const name = this.alias(dir, m);
     const key = m ? `r:${m}:${dir}` : `c:${dir}`;
     if (!m) this.vis.push(key);
+    // On the rail: an outlined avatar; a click opens it, with a terminal.
+    if (collapsed) return this.avatar(`project-${m ?? ""}-${name}`, name, t, { parked: true, tip: m ? `${name} \u00b7 ${m} \u00b7 parked` : `${name} \u00b7 parked` })
+      .on_click(() => {
+        const there = spaces().find((s) => (s.machine ?? null) === m && (s.folder ?? "").replace(/\/+$/, "") === dir);
+        return there ? run("space.select", { id: there.id }) : run("space.new", { name, folder: dir, machine: m ?? "" });
+      })
+      .on_mouse_down("right", () => (m ? this.folderMenu(dir, m) : this.folderMenu(dir)));
     return h_flex().id(`project-${name}`).h(collapsed ? 26 : 30).flex_none().px(collapsed ? 0 : 8).gap(9).items_center().rounded(8)
       .when(collapsed, el => el.justify_center())
       .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
@@ -2334,7 +2345,7 @@ export default class Spaces extends View {
     const on = Boolean(this.filter);
     // With a filter on, a space also stays for an agent in one of its worktrees.
     const inWorktree = (r) => on && [...this.busyWorktrees()].some(([d, main]) => main === r.w.id && this.spaceMatches(`d:${d}`));
-    const draw = (r) => (on && !this.spaceMatches(r.w.id) && !inWorktree(r) ? [] : r.under && this.agentsFolded.has(r.under) && !on ? [] : collapsed ? [this.compact(r, t)] : [this.row(r, t), ...(this.agentsFolded.has(r.w.id) && !on ? [] : this.termRows(r.w.id, t, r.tree ? TREE : 0)),
+    const draw = (r) => (on && !this.spaceMatches(r.w.id) && !inWorktree(r) ? [] : r.under && this.agentsFolded.has(r.under) && !on ? [] : collapsed ? [this.compact(r, t), ...this.railAgents(r.w.id, t)] : [this.row(r, t), ...(this.agentsFolded.has(r.w.id) && !on ? [] : this.termRows(r.w.id, t, r.tree ? TREE : 0)),
       // Another computer's space: this computer's agents connected and working in it.
       ...(r.w.machine && r.w.folder && !on ? this.sshRows(r.w.machine, t, r.w.folder.replace(/\/+$/, "")) : []),
       // Sub-agents started elsewhere that are working in this space.
@@ -2369,6 +2380,8 @@ export default class Spaces extends View {
       const folded = this.folded.has(m);
       // The heading keeps the arrow (it folds on a click); its + gets the hand.
       const head = h_flex().id(`machine-${m ?? "local"}`).h(31).flex_none().px(collapsed ? 2 : 8).gap(7).items_center().text_size(11.5).text_color(t.dim)
+        // On the rail: its icon alone, centred (fainter when it's away), its name on hover.
+        .when(collapsed, el => el.justify_center().rounded(6).tooltip(`${m ?? "This computer"}${connected ? "" : " \u00b7 not connected"}${folded ? " \u00b7 folded" : ""}`).when(!connected, el => el.opacity(0.5)))
         .hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
@@ -2388,7 +2401,7 @@ export default class Spaces extends View {
             .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .on_click((_e, cx) => { cx.stop_propagation(); this.addHome(m); })
             .child(svg("mods/workspace-chrome/plus.svg").size(12)))));
-      const drawn = m ? [...(on ? [] : this.sshRows(m, t)), ...mine.flatMap(draw), ...busy(m)] : [...(homeAt < 0 ? others() : []), ...drawAll(mine)];
+      const drawn = m ? [...(on || collapsed ? [] : this.sshRows(m, t)), ...mine.flatMap(draw), ...busy(m)] : [...(homeAt < 0 ? others() : []), ...drawAll(mine)];
       const extra = on ? [] : m ? this.closedSection(t, collapsed, m) : closed();
       // Filtered: a computer with nothing that passes isn't listed at all.
       if (on && !drawn.length) return [];
@@ -2799,6 +2812,7 @@ export default class Spaces extends View {
         }
         cx.notify();
       })
+      .when(collapsed, (el) => el.justify_center().tooltip("Parked"))
       .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(11).flex_none())
       .when(!collapsed, (el) => el.child(div().flex_1().truncate().child("Parked")))
       // Open: how they're ordered, the same on every computer.
@@ -2855,18 +2869,53 @@ export default class Spaces extends View {
     });
   }
 
-  compact({ w, i }, t) {
-    return h_flex()
-      .id(`space-${w.id}`)
-      .h(26)
-      .flex_none()
-      .justify_center()
-      .gap(4)
-      .when(w.active, (el) => el.bg(t.raised))
-      .hover((s) => s.bg(t.hover))
+  // The rail (the sidebar folded with its button) shows the same list small. A
+  // space or a folder is an avatar: its first letter on its colour (`fill`), ringed
+  // when it's the one shown, outlined and dim when it's parked, with a dot on its
+  // corner (`dot`: a colour) when something in it needs you. Hovering names it.
+  avatar(id, name, t, { color = null, active = false, parked = false, small = false, dot = null, tip = name } = {}) {
+    const tint = color ?? t.foreground;
+    return h_flex().id(id).h(small ? 28 : 32).flex_none().items_center().justify_center().cursor_pointer().tooltip(tip)
+      .child(h_flex().relative().size(small ? 22 : 26).flex_none().items_center().justify_center().rounded(7)
+        .border_1().border_color(active ? tint : parked ? t.border : "#00000000")
+        .when(!parked, (el) => el.bg(color ? `${color.slice(0, 7)}30` : t.raised))
+        .text_size(small ? 11 : 12.5).font_semibold().text_color(parked ? t.dim : tint)
+        .child([...name][0]?.toUpperCase() ?? "?")
+        .when(Boolean(dot), (el) => el.child(div().absolute().top(-3).right(-3).size(8).rounded(4).bg(dot))));
+  }
+
+  // A space on the rail: a click shows it, a right-click opens its menu.
+  compact({ w, tree }, t) {
+    const name = this.title(w);
+    return this.avatar(`space-${w.id}`, name, t, { color: this.spaceColor(w, t), active: w.active, small: Boolean(tree),
+      dot: w.status === "blocked" ? t.blocked : w.status === "done" ? (t.done ?? t.accent) : null, tip: w.machine ? `${name} \u00b7 ${w.machine}` : name })
       .on_click(() => run("space.select", { id: w.id }))
-      .child(div().text_color(w.active ? t.foreground : t.muted).child(String(i + 1)))
-      .child(div().text_color(tone(t, w.status)).child(glyph(w.status)));
+      .on_mouse_down("right", () => this.menu(w));
+  }
+
+  // The agents under a space or folder (key) on the rail: each its program's icon,
+  // then its state (a spinner while it works, a dot when it needs you or is done),
+  // lit when it's the one in front. Hovering names it and says its state; a click
+  // goes to it. What an agent started itself isn't listed (as in termRows).
+  railAgents(key, t) {
+    const { byPane } = this.frame;
+    const live = new Map((this.frame.terms ?? []).filter((k) => k.state === "live").map((k) => [k.address, k]));
+    const child = (term) => Boolean(live.get(term)?.parent && live.has(live.get(term).parent)) || live.get(term)?.labels?.over9k === "view";
+    const says = { working: "working", blocked: "needs you", done: "done", idle: "idle" };
+    return (this.frame.groups.get(key) ?? []).filter(({ p }) => byPane.get(p.pane) && this.passes(byPane.get(p.pane)) && !child(p.terminal)).map(({ p, space, tab }) => {
+      const a = byPane.get(p.pane), prog = (a ?? p).program;
+      return h_flex().id(`rail-${p.terminal}`).h(24).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer()
+        .tooltip(`${agentName(a, tab, p.cwd)}${says[a.status] ? ` \u00b7 ${says[a.status]}` : ""}`)
+        .when(space.active && p.focused, (el) => el.bg(t.hover))
+        .hover((s) => s.bg(t.hover))
+        .on_click(() => { if (!space.active) run("space.select", { id: space.id }); run("pane.focus", { pane: p.pane }); })
+        .on_mouse_down("right", (_e, cx) => {
+          cx.stop_propagation();
+          openOverlay({ mod: "over9k-menu", kind: "popup", width: 220, height: 300, props: { tab: "pane", target: { pane: p.pane, terminal: p.terminal } } });
+        })
+        .child(progIcon(prog, t, 14))
+        .child(h_flex().w(9).flex_none().justify_center().child(this.mark(a, t, 9)));
+    });
   }
 
   render() {
@@ -2923,7 +2972,7 @@ export default class Spaces extends View {
           .child(svg("mods/workspace-chrome/sidebar.svg").size(15)))))
       .when(!collapsed, (el) => el.child(this.filterBar(t)))
       .when(Boolean(none), (el) => el.child(div().px(16).py(6).text_size(12).text_color(t.dim).child(FILTERS.find((f) => f.id === this.filter)?.empty ?? "")))
-      .child(v_flex().id("spaces-scroll").flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
+      .child(v_flex().id("spaces-scroll").flex_1().min_h(0).px(collapsed ? 4 : 8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(list))
       // On its own (no Over9k footer in this window): its help and options here.

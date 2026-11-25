@@ -41,6 +41,13 @@ function inLayout() {
   return Boolean(find(layout()));
 }
 const ROW = 28, LIMIT = 20, TABS = 26, GRAPH = 72;
+// The sidebar folded to its rail (by its width, as over9k's own check): each
+// service is a cell CELL high, its name over its headline number.
+const CELL = 34;
+function narrow() {
+  const find = (n) => n && (n.id === "sidebar" ? n : (n.children ?? []).map(find).find(Boolean));
+  return (find(layout())?.size?.px ?? Infinity) < 160;
+}
 
 const CODEX = `f=$(ls -t "$HOME"/.codex/sessions/*/*/*/*.jsonl 2>/dev/null | head -n 1); [ -n "$f" ] || exit 0
 grep -o '"rate_limits":{.*' "$f" | tail -n 1 | sed 's/^"rate_limits"://' | jq -c '{plan: .plan_type, primary, secondary}' 2>/dev/null`;
@@ -244,7 +251,7 @@ export default class Usage extends View {
   // The block's height: every row, plus the open ones' limits.
   fit() {
     if (!inLayout()) return;
-    const h = this.services.length ? 6 + this.services.reduce((n, s) => n + ROW + (this.open.has(s.key) ? (s.days ? TABS + GRAPH + Math.max(1, spendIn(s.days, this.period(s).days).models.length) * LIMIT : Math.max(1, s.limits?.length ?? 0) * LIMIT) + 4 : 0), 0) : 0;
+    const h = !this.services.length ? 0 : narrow() ? 8 + this.services.length * CELL : 6 + this.services.reduce((n, s) => n + ROW + (this.open.has(s.key) ? (s.days ? TABS + GRAPH + Math.max(1, spendIn(s.days, this.period(s).days).models.length) * LIMIT : Math.max(1, s.limits?.length ?? 0) * LIMIT) + 4 : 0), 0);
     if (h !== this.height) { this.height = h; run("layout.resize", { id: BLOCK, px: h }); }
   }
 
@@ -331,11 +338,41 @@ export default class Usage extends View {
       .when(!this.services.length && !missingClaude, (el) => el.child(div().text_color(t.dim).child("No usage yet: start Claude Code, Codex or Antigravity")));
   }
 
+  // On the rail: a cell per service, its name small over its headline (the limit's
+  // %, in its colour, or a cost). Hovering says the rest; a click unfolds the
+  // sidebar with that row open.
+  cells(t) {
+    const cost = (n) => (n >= 100 ? `$${Math.round(n)}` : n >= 10 ? `$${n.toFixed(1)}` : money(n));
+    return v_flex().w_full().pt(4).border_t(1).border_color(t.border).bg(t.chrome)
+      .children(this.services.map((s) => {
+        const top = this.headline(s), p = s.days && this.period(s), sum = s.days && spendIn(s.days, p.days);
+        const who = [s.name, s.plan, s.where].filter(Boolean).join(" \u00b7 ");
+        const what = s.days ? `${money(sum.total)} in the last ${p.label}`
+          : (s.limits ?? []).map((l) => `${l.label} ${Math.round(l.used)}%${l.left != null ? ` (resets in ${left(l.left)})` : ""}`).join(", ");
+        return v_flex().id(`usage-cell-${s.key}`).h(CELL).flex_none().items_center().justify_center().rounded(6).cursor_pointer().tooltip(`${who}: ${what}`)
+          .hover((x) => x.bg(t.hover))
+          .on_click((_e, cx) => {
+            this.open.add(s.key);
+            setShared("over9k.usageOpen", [...this.open]);
+            setShared("sidebar.collapsed", false);
+            run("layout.resize", { id: "sidebar", px: shared("sidebar.width") ?? 268 });
+            cx.notify();
+          })
+          .child(div().max_w_full().truncate().text_size(9.5).text_color(t.dim).child(s.name))
+          .child(s.days ? div().text_size(11).text_color(t.foreground).child(cost(sum.total))
+            : div().text_size(11.5).text_color(top ? this.color(t, top.used) : t.dim).child(top ? `${Math.round(top.used)}%` : "\u2013"));
+      }));
+  }
+
   render(cx) {
     const t = theme();
     const o = JSON.stringify(shared("sidebar.options") ?? {});
     if (o !== this.seenOptions) { this.seenOptions = o; this.pick(); }
     if (!inLayout()) return this.strip(t, cx);
+    // Folded or unfolded since the last frame: the block's height follows.
+    const rail = narrow();
+    if (rail !== this.rail) { this.rail = rail; this.fit(); }
+    if (rail) return this.cells(t);
     const dim = (s) => div().text_size(11).text_color(t.dim).child(s);
     return v_flex().w_full().pt(3).px(10).border_t(1).border_color(t.border).bg(t.chrome).text_size(12.5)
       .children(this.services.map((s, i) => {

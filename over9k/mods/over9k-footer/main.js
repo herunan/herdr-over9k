@@ -38,6 +38,7 @@ function notes(text, from, to) {
   for (const line of (text ?? "").split("\n")) {
     const h = line.match(/^##\s+v?(\d+(?:\.\d+)*)/);
     if (h) { on = from ? newer(h[1], from) && !newer(h[1], to) : h[1] === to; continue; }
+    if (/^##\s/.test(line)) { on = false; continue; } // "## Unreleased": not a release's
     if (!on) continue;
     const b = line.match(/^\s*[-*]\s+(.*)$/);
     if (b) out.push(b[1].trim());

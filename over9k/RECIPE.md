@@ -54,6 +54,18 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
     - Projects not open are listed under a folded **Parked** heading (11px,
       `dim`). Open, it ends in a small **A–Z / Recent** switch (as Agents'
       Space / Status): by name, or last worked on first.
+    - **Folded to its rail** (the header's sidebar button; 44px, 76 on macOS):
+      the same list small. A computer is its icon, centred. A space is a 26px
+      rounded square (22px for a worktree) with its first letter in its colour on
+      that colour at 19%, ringed in it when it's the one shown, with an 8px
+      `blocked` or `done` dot on its corner when something in it needs you. Under
+      it, each agent is a 24px row: its program's 14px icon, then a 9px spinner
+      while it works or a 7px dot when it needs you or is done; `hover` behind the
+      one in front. A parked project is an outlined square in `dim`. Hovering
+      names any of them; a click goes there, a right-click opens its menu.
+      Usage becomes a 34px cell per service: its name (9.5px, `dim`) over its
+      headline % in its colour, or its cost. A click unfolds the sidebar with
+      that row open.
   - **Usage** (`over9k-usage`): one 29px row per service, as tall as its rows.
     Each row has the name in `muted`, the plan in a 10.5px badge (`raised`
     background, `accent` text), the reset time in `dim`, the used percentage
@@ -331,6 +343,9 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
   "Ask before closing an idle agent" on, an idle agent's tab asks too; a plain
   terminal's never does.
 - Two computers in the sidebar have a line between them, and their names are bold.
+- The header's sidebar button folds the sidebar to a rail that still lists each
+  space as a lettered square and each agent as its icon with its state, with
+  Usage as a number per service. Hovering one names it; clicking it goes there.
 - Parked › Recent lists the project you closed last first; A–Z goes back to names.
 - Cmd+K, part of a project's name, Enter: its space shows (a parked one opens).
 - Options › Look › Translucent: the sidebar and bars show the desktop, blurred,

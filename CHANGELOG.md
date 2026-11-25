@@ -4,6 +4,10 @@ What's new in each release of Over9k, newest first. Over9k help & options shows
 the entries of the releases you don't have yet, next to its Update button, so
 each one is a single line that reads on its own.
 
+## 0.2.0
+
+- Sidebar: folded to its rail, it still lists spaces, agents and usage
+
 ## 0.1.0
 
 - Releases: Over9k has versions now, and updates go release to release

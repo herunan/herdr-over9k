@@ -14,7 +14,7 @@ menu away.
 
 It docks on the left, 268px wide (44 when collapsed; 76 on macOS, where the rail
 has a button at its top to unfold it), on `chrome`, in 13px type.
-All colours are theme names.
+All colours are theme names. Collapsed, it's a rail of the same list: each space a lettered square in its colour, each agent its icon with its state, named on hover.
 
 - **Filter row**, 30px: **All** and **Agents N** as 20px tabs, the picked one on
   `raised`. Agents groups every agent by Space or by Status ("Needs you",
