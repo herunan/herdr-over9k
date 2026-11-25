@@ -154,7 +154,10 @@ if ($isLayout) {
   $dataHome = if ($env:XDG_DATA_HOME) { $env:XDG_DATA_HOME } else { Join-Path $env:USERPROFILE ".local\share" }
   $data = Join-Path $dataHome "over9k"
   New-Item -ItemType Directory -Force -Path $data | Out-Null
-  WriteJson (Join-Path $data "source.json") ([ordered]@{ path = $root; commit = $commit; branch = $branch })
+  $version = $null
+  $versionFile = Join-Path $PSScriptRoot "VERSION"
+  if (Test-Path $versionFile) { $version = "$(Get-Content $versionFile -TotalCount 1)".Trim(); if (-not $version) { $version = $null } }
+  WriteJson (Join-Path $data "source.json") ([ordered]@{ path = $root; commit = $commit; branch = $branch; version = $version })
 }
 
 # The mods. Files the mods write themselves aren't replaced on an update.

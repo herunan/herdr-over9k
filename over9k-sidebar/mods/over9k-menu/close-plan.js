@@ -3,9 +3,14 @@
 // whose tabs all go closes as a space. The same file is copied into each mod
 // that closes things (mods can't import from each other); over9k-close's is the
 // original.
-import { spaces, panes, agents } from "herdr";
+import { spaces, panes, agents, shared } from "herdr";
 
 export const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// Whether closing what a plan holds asks first (over9k-close): a whole space, an
+// agent still working, or, with Options › Agent rows › "Ask before closing an
+// idle agent" on, any agent at all. Terminals alone close at once, as in Herdr.
+export const asks = (p) => Boolean(p.spaces || p.working || (p.agents && shared("sidebar.options")?.askIdle));
 
 // { commands, spaces, spaceNames, terminals, agents, working, label }: working,
 // the agents among them still working (or waiting on you); label names the one

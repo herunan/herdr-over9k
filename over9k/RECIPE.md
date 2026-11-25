@@ -25,12 +25,18 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
 `working`, `blocked`, `done`, `ansi1`–`ansi3`), so it follows any theme.
 
 - **Sidebar**, 268px wide (44 to 480), on `chrome`. From top to bottom:
-  - **Brand**, 46px: Herdr's own `workspace-chrome`. Drags the window.
+  - **Brand**, 46px: `over9k-footer`'s header (no `props.footer`), the same as
+    Herdr's `workspace-chrome`: Herdr's icon and name, search, the sidebar toggle.
+    With a company logo (Options › Logo), the logo takes the icon's place, 20px
+    high (at most 110 wide), then a 1×14px `border` hairline and the name. Drags
+    the window.
   - **Spaces**, filling the rest of the height (`over9k`):
     - A filter row, 30px high: **All** and **Agents N** as 20px text tabs, the
       picked one on `raised`.
-    - Each computer's header: "This computer", or a machine's name, with a
-      monitor or server icon, a green connection dot, a fold chevron and a +.
+    - Each computer's header: "This computer", or a machine's name (12px,
+      semibold, `foreground`), with a monitor or server icon, a green connection
+      dot, a fold chevron and a +. Each computer after the first starts under a
+      1px `border` line, 10px below what's above it and 6px above its header.
     - Each project as a 30px row, its name in its own colour, then its
       badges: a GitHub or GitLab mark, the uncommitted count (`ansi3`), ↑ ahead
       (`ansi2`) and ↓ behind (`ansi1`), open pull requests (a PR icon and
@@ -46,7 +52,8 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
       commands and scheduled prompts. Each has its icon, its name in `muted`,
       and its age or time.
     - Projects not open are listed under a folded **Parked** heading (11px,
-      `dim`).
+      `dim`). Open, it ends in a small **A–Z / Recent** switch (as Agents'
+      Space / Status): by name, or last worked on first.
   - **Usage** (`over9k-usage`): one 29px row per service, as tall as its rows.
     Each row has the name in `muted`, the plan in a 10.5px badge (`raised`
     background, `accent` text), the reset time in `dim`, the used percentage
@@ -121,7 +128,21 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
     Tab and Shift+Tab move, and letting go of Ctrl opens the picked agent.
   - Ctrl+Shift+W and Ctrl+Shift+X (Cmd+Shift+W and Cmd+Shift+X on macOS) close
     the tab or pane, asking first through
-    `over9k-close`, which says what ends.
+    `over9k-close`, which says what ends. It asks for a whole space or an agent
+    still working; with Options › Agent rows › "Ask before closing an idle
+    agent" (`askIdle`), for any agent. Terminals alone close at once.
+  - Cmd+K (Ctrl+Shift+K off macOS, in place of Herdr's picker) opens
+    `over9k-search`, a 560px popup at the top: an input, then **Agents** (most
+    recently used first, the one before this picked) and **Projects** (open
+    spaces, then parked ones marked "Parked"), on every computer. Typing
+    filters both by name, folder, space or program, best match first. Enter
+    shows the agent, selects the space, or opens the parked project with a
+    terminal; Esc closes.
+- **Parked › Recent:** a project counts as worked on while it's open (a space,
+  a terminal in it, or something working in it): stamped then, kept in
+  `localStorage` (`projects.worked`). One never open here goes by its last
+  commit (`git log -1`, on its own computer, looked up while Recent shows). The
+  rest stay by name, after.
 - **Panel buttons** toggle the side panel. Timeline opens only from its own
   button: if anything else turns the panel to it, the tab bar puts the previous
   panel back.
@@ -141,25 +162,39 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
 - **Usage:** click a row to show every limit as a 3px bar, with its reset time.
   Click a limit to make it that row's headline and list it first; click it again
   for the fullest (`over9k.usageHeadline`, by service; a limit that's gone falls back).
+  A subscription only a connected computer has gets a row too, with that
+  computer's name: a Claude account other than this computer's (every one, when
+  this computer is billed by use or has no Claude), and Codex when this computer
+  has none.
   A row billed by use (one per computer) has `api-cost.py`'s cost from the transcripts
   instead: tabs for 30d, 2w, 1w, 1d (also the row's number) over bars by day, stacked by
   model, and each model's cost for the tab as the chart's key.
   The block resizes to fit.
 - **Updates:** the installer saves where it ran from in
-  `~/.local/share/over9k/source.json` (the folder, and its commit and branch if
-  it's a git clone). The footer fetches that branch on start and every 6 hours
-  (Options › Folders › Check for updates) and puts the new commits' subjects in
-  shared `over9k.update`. Help & options then shows "Update available · N
-  changes", the list, and Update: `git pull --ff-only`, then
-  `install.sh --yes --no-claude`. Herdr reloads the mods as they land, so no
-  restart. If the pull can't fast-forward (local changes), the card says why.
+  `~/.local/share/over9k/source.json` (the folder, its version from the
+  `VERSION` file, and its commit and branch if it's a git clone). The footer
+  puts the version in shared `over9k.version` (Help & options shows it after its
+  title), and on start and every 6 hours (Options › Folders › Check for updates)
+  fetches that branch with its tags. Updates go release to release: the newest
+  `v1.2.3` tag on the branch, when it has commits the install hasn't. Its
+  version, and the entries `CHANGELOG.md` has there for every version after the
+  installed one, go to shared `over9k.update`. Help & options then shows "Update
+  available · 1.2.3", "You have 1.2.0", the entries, and Update:
+  `git merge --ff-only v1.2.3`, then `install.sh --yes --no-claude`. Herdr
+  reloads the mods as they land, so no restart. If it can't fast-forward (local
+  changes), the card says why. A repo with no version tag yet is followed commit
+  by commit, as before: "Update available · N changes", the commits' subjects,
+  and `git pull --ff-only`.
+- **Releases:** `tools/release.sh 1.2.3`, on main with everything committed and
+  a `## 1.2.3` section in `CHANGELOG.md`: writes `VERSION`, commits it, tags
+  `v1.2.3`. Pushing the branch and the tag publishes it.
 
 ## Built from
 
 - **Layout `layouts/over9k.json`**, cloned from `main`. The root `row` has
   `titlebar: none`, `terminal_menu: "over9k-menu"`, a 1px `border` divider and
   `preview: layouts/over9k.svg`.
-  - `sidebar` column: `brand` (workspace-chrome), `sidebar-lists` holding
+  - `sidebar` column: `brand` (over9k-footer), `sidebar-lists` holding
     `spaces` (over9k), `usage` (over9k-usage), and `sidebar-footer`
     (over9k-footer, `props.footer: true`).
   - `work` column: `tabs` (over9k-tabs), `work-body` row, and `status`
@@ -174,10 +209,20 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
   - `over9k-todos` (with `todo.sh`, `todo-cross.py`, `todo-hook.sh`) and
     `over9k-prompts` (with `prompts.py`).
   - Overlays: `over9k-menu`, `over9k-new-menu` (with `resume.sh`),
-    `over9k-switcher`, `over9k-close`, `over9k-rename`, `over9k-handoff`,
-    `over9k-server-stop`, `over9k-panel`.
+    `over9k-switcher`, `over9k-search`, `over9k-close`, `over9k-rename`,
+    `over9k-handoff`, `over9k-server-stop`, `over9k-panel`.
   - `over9k-options`: the Help and Options overlay. Its `setup.sh` turns the
-    pieces outside Herdr on and off.
+    pieces outside Herdr on and off. Options › Logo (only where the header is
+    `over9k-footer`'s) copies a picked SVG, PNG or JPEG into `over9k-logo/` in
+    Herdr's home, a new name each time, and saves `logo: {light, dark}` (each
+    `{path, aspect, layers?}`) in `sidebar.options`; either one shows in both
+    appearances when it's the only one. `logo.js` does the copying and drawing.
+    Options › Look › Translucent (`translucent`, only with `over9k-footer` in
+    the layout, which does the work): the shown layout's file gets root
+    `window_blur: true`, `colors` with the theme's `chrome`, `canvas` and
+    `background` fully clear, and `background` set to the theme's chrome at 86%
+    (`db`). Written again when the theme changes or an update puts the file back;
+    off restores the root (`over9k.glass` keeps what its background was).
 - **Shipped mods used:** `workspace-chrome`, `workspace-status`, `pane`,
   `files`, `changes`, `picker`, `machine-add`, `worktree`, `new-menu`, plus
   Herdr's `icons/` for agent logos.
@@ -245,6 +290,21 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
   PATH. Codex session detection and Antigravity subagents read `/proc`, so they
   work on Linux only.
 - The side panel is one stack for the whole window, not one per space.
+- Translucent uses one sheet of glass (the root's background) because the bars
+  and the sidebar stack three or four layers of `chrome`: a translucent `chrome`
+  adds up to nearly solid, and unevenly. How strong the blur is belongs to the
+  system (on KDE: Desktop Effects › Blur).
+- An SVG logo as an `image()` looks off at 20px: Herdr draws it at its own
+  `width`/`height` and scales it without smoothing (jagged at the viewBox's
+  size, or 2×), and blends its edges into dark fringes (thin white strokes on a
+  dark theme look grey and ragged). So a flat-colour SVG is split into one SVG
+  per fill colour (`layers`, each `{path, color}`), drawn stacked as `svg()`s
+  tinted that colour: clean one-colour masks at the screen's resolution.
+  Anything it can't split safely (gradients, strokes, CSS, opacity, clips,
+  `<use>`, text, embedded images, over 8 colours) stays an `image()`, its copy's
+  `width`/`height` set to exactly the size it shows at.
+  The picked file is copied, never used in place: images load only from
+  Herdr's home, and an install deletes files it didn't put in a mod's folder.
 - Usage reads Claude from `usage/claude.json`, Codex from its latest session file,
   and Gemini only once Over9k's Antigravity status line is on (Options ›
   Session footers).
@@ -267,5 +327,18 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
   Ticking it in the panel shows it done in `todo`.
 - Ctrl+Tab lists agents most recent first, and letting go of Ctrl focuses the
   picked one.
-- Closing a tab with a working agent asks first, and names what ends.
+- Closing a tab with a working agent asks first, and names what ends. With
+  "Ask before closing an idle agent" on, an idle agent's tab asks too; a plain
+  terminal's never does.
+- Two computers in the sidebar have a line between them, and their names are bold.
+- Parked › Recent lists the project you closed last first; A–Z goes back to names.
+- Cmd+K, part of a project's name, Enter: its space shows (a parked one opens).
+- Options › Look › Translucent: the sidebar and bars show the desktop, blurred,
+  and terminals stay solid. Off: the window is solid again.
+- With Claude billed by use here and a subscription on a connected computer,
+  Usage shows both: the cost row, and the subscription's limits with that
+  computer's name.
 - Help shows the To-do, Timeline and Usage pages under Panels.
+- Options › Logo › Light themes › Choose… with an SVG shows it in the header
+  in place of Herdr's icon, 20px high, in both appearances; Remove brings the
+  icon back.

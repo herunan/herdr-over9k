@@ -19,6 +19,10 @@ yellow or red, with when it resets. Hover a service to see every limit.
   plan limits, so its row shows a badge saying which, one row per computer, and its cost, such as
   "1d $14.20". Open it for tabs (30d, 2w, 1w, 1d; also the row's number) and
   a bar a day stacked by model, with each model's cost as the key. It's estimated from tokens at list prices, not the AWS bill.
+- **A subscription only a connected computer has** gets a row too, with that
+  computer's name after the plan: a Claude account other than this computer's
+  (every one, when this computer is billed by use or has no Claude), and Codex
+  when this computer has none. One account on several computers is one row.
 - **Inside the Over9k layout**, the same data is drawn as 28px rows above the
   sidebar's footer. Clicking a row opens every limit as a 3px bar.
 

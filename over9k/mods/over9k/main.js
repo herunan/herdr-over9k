@@ -13,7 +13,7 @@
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, agents, terminals, setAgentOrder, run, openOverlay, exec, hc, home, appHome, readTextFile, theme, shared, setShared, watchFolder, window, layout, notify, focused, nextCommand } from "herdr";
-import { plan, plural } from "./close-plan.js";
+import { plan, asks, plural } from "./close-plan.js";
 import { codexTitle, agentTask, isCodex, sentenceCase } from "./agent-name.js";
 
 // Python 3 runs as "python3", else "python" (as on Windows): found once.
@@ -22,11 +22,12 @@ const python = (args) => (PY ??= exec("python3", ["-c", "1"]).then((r) => (r?.co
   .then((p) => exec(p, args));
 
 // Closing asks first (over9k-close says how many terminals and agents end)
-// when a whole space would go or an agent that's still working would end, else
-// happens at once, as Herdr does.
+// when a whole space would go or an agent that's still working would end (an idle
+// one too, with over9k-options' "Ask before closing an idle agent"), else happens
+// at once, as Herdr does (close-plan.js: asks).
 function closeAsk(picked) {
   const p = plan(picked);
-  if (!p.spaces && !p.working) for (const c of p.commands) run(c.name, c.args);
+  if (!asks(p)) for (const c of p.commands) run(c.name, c.args);
   else openOverlay({ mod: "over9k-close", kind: "dialog", width: 380, height: 150, props: picked });
 }
 
@@ -86,6 +87,8 @@ const QUIET = ["GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -o BatchMode=yes"];
 // or hide one from its right-click menu instead), and how often new ones are looked for.
 const SKIP = new Set();
 const RESCAN = 30000;
+// Each folder's last commit (seconds; 0 when it has none or isn't a repo), one a line, in order.
+const LAST_COMMITS = `for d in "$@"; do t=$(git -C "$d" log -1 --format=%ct 2>/dev/null); echo "\${t:-0}"; done`;
 // Project folders: a git repo in a code folder (the arguments), or anywhere up
 // to two levels under home a folder set up for an agent (CLAUDE.md,
 // CLAUDE.local.md, AGENTS.md, a .claude folder). Git alone elsewhere is usually
@@ -326,6 +329,12 @@ export default class Spaces extends View {
     const autoOn = Object.fromEntries(Object.entries(this.remote).map(([m, f]) => [m, f.dirs ?? []]));
     if (JSON.stringify(autoOn) !== JSON.stringify(shared("projects.autoOn") ?? {})) setShared("projects.autoOn", autoOn);
     this.closedOpenOn = JSON.parse(localStorage.getItem("projects.closedOpenOn") ?? "{}");
+    // Parked's order (its header's A–Z / Recent): by name, or last worked on first.
+    // worked: "machine:folder" ("" for this computer) -> when it was last open here
+    // (ms); commitAt: -> its last commit (ms; looked up while Recent shows).
+    try { this.closedSort = localStorage.getItem("projects.closedSort") === "recent" ? "recent" : "name"; } catch { this.closedSort = "name"; }
+    try { this.worked = JSON.parse(localStorage.getItem("projects.worked") ?? "{}"); } catch { this.worked = {}; }
+    this.commitAt = {};
     // Model, effort and context per agent, one file per Herdr terminal here:
     // claude-info.py writes Claude Code's (from its own session and conversation
     // files; no status line), Antigravity's status line its own (optional).
@@ -390,6 +399,7 @@ export default class Spaces extends View {
     const due = this.due(now, sp, panes());
     if (due.size) this.refreshGit(due, cx);
     this.resolveTops(cx);
+    if (this.wantCommits?.length) this.loadCommits(this.wantCommits, cx);
     if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
   }
 
@@ -2351,6 +2361,7 @@ export default class Spaces extends View {
     const drawAll = (list) => list.flatMap((r) => [...draw(r), ...(r === rows[homeAt] ? others() : [])]);
     // This computer always gets its heading (its +, local servers), others too.
     const machineNames = [null, ...remote];
+    let listedBefore = 0; // computers drawn above this one: each further one starts under a line
     return machineNames.flatMap((m) => {
       const mine = rows.filter((r) => (r.w.machine ?? null) === m);
       const machine = this.machines.find(k => k.name === m);
@@ -2366,7 +2377,7 @@ export default class Spaces extends View {
         })
         .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(14).flex_none())
         // Name, then whether it's reachable and the fold chevron right after it; the + at the far end.
-        .when(!collapsed, el => el.child(div().min_w(0).truncate().child(m ?? "This computer"))
+        .when(!collapsed, el => el.child(div().min_w(0).truncate().text_size(12).font_semibold().text_color(t.foreground).child(m ?? "This computer"))
           .child(div().size(6).rounded(3).flex_none().bg(connected ? t.ansi2 : t.dim))
           .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none())
           .when(!m, el => el.children(this.serverChips(t)))
@@ -2381,10 +2392,12 @@ export default class Spaces extends View {
       const extra = on ? [] : m ? this.closedSection(t, collapsed, m) : closed();
       // Filtered: a computer with nothing that passes isn't listed at all.
       if (on && !drawn.length) return [];
+      // Between two computers: a hairline, with room around it.
+      const line = listedBefore++ ? [div().id(`machine-line-${m}`).h(1).flex_none().mx(collapsed ? 2 : 8).mt(10).mb(6).bg(t.border)] : [];
       // Nothing under a machine with no spaces: its heading's + makes one.
       // Not connected: what's there is as last seen, faded (nothing in it is live).
       const shown = connected ? [...drawn, ...extra] : [v_flex().flex_none().opacity(0.4).children([...drawn, ...extra])];
-      return [head, ...(folded ? [] : mine.length || extra.length || drawn.length ? shown : loading(m) ? [loadingRow(m)] : [])];
+      return [...line, head, ...(folded ? [] : mine.length || extra.length || drawn.length ? shown : loading(m) ? [loadingRow(m)] : [])];
     });
   }
 
@@ -2764,6 +2777,16 @@ export default class Spaces extends View {
     const list = this.closedOn(m).filter((d) => !busy.has(d));
     if (!list.length) return [];
     const open = m ? Boolean(this.closedOpenOn[m]) : this.closedOpen;
+    // Recent: last worked on first (workedAt); those never seen stay by name, after.
+    const recent = this.closedSort === "recent";
+    if (recent) list.sort((a, b) => this.workedAt(b, m) - this.workedAt(a, m));
+    if (recent && open) this.wantCommits.push({ m, dirs: list });
+    const by = (id, label) => h_flex().id(`parked-by-${id}-${m ?? "local"}`).h(18).px(6).flex_none().items_center().rounded(4).cursor_pointer()
+      .text_color(this.closedSort === id ? t.foreground : t.dim).when(this.closedSort === id, (el) => el.bg(t.raised))
+      .hover((s) => s.text_color(t.foreground))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); this.closedSort = id; try { localStorage.setItem("projects.closedSort", id); } catch {} cx.notify(); })
+      .child(label);
     const head = h_flex().id(`projects-closed-${m ?? "local"}`).h(26).flex_none().mt(6).px(collapsed ? 2 : 8).gap(7).items_center().text_size(11).text_color(t.dim)
       .rounded(7).hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => {
@@ -2777,8 +2800,59 @@ export default class Spaces extends View {
         cx.notify();
       })
       .child(svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`).size(11).flex_none())
-      .when(!collapsed, (el) => el.child(div().flex_1().truncate().child("Parked")));
+      .when(!collapsed, (el) => el.child(div().flex_1().truncate().child("Parked")))
+      // Open: how they're ordered, the same on every computer.
+      .when(!collapsed && open, (el) => el.child(h_flex().flex_none().gap(1).p(1).rounded(5).border_1().border_color(t.border)
+        .child(by("name", "A\u2013Z")).child(by("recent", "Recent"))));
     return [head, ...(open ? list.map((d) => this.closedRow(d, t, collapsed, m)) : [])];
+  }
+
+  // When a parked project was last worked on (ms; 0: not known): when it was last
+  // open here (a space, or something working in it), else its last commit.
+  workedAt(dir, m = null) {
+    const k = `${m ?? ""}:${dir}`;
+    return Math.max(this.worked[k] ?? 0, this.commitAt[k] ?? 0);
+  }
+
+  // Pinned projects that are open now (a space, a terminal in one, or something
+  // working in a parked one) are stamped as worked on: when that set changes, and
+  // every minute, so a project parked later sorts by when it was last open.
+  // Looked at every couple of seconds at most.
+  stampWorked() {
+    if (Date.now() - (this.workedLook ?? 0) < 2000) return;
+    this.workedLook = Date.now();
+    const open = [null, ...Object.keys(shared("projects.on") ?? {})].flatMap((m) => {
+      const closed = new Set(this.closedOn(m)), busy = new Set(this.lifted(m));
+      return (m ? this.listedOn(m) : this.projects).filter((d) => !closed.has(d) || busy.has(d)).map((d) => `${m ?? ""}:${d}`);
+    });
+    const now = Date.now(), key = open.join("\n");
+    if (key === this.workedKey && now - (this.workedStamp ?? 0) < 60000) return;
+    this.workedKey = key;
+    this.workedStamp = now;
+    // Projects no longer pinned anywhere drop off.
+    const pinned = new Set([null, ...Object.keys(shared("projects.on") ?? {})].flatMap((m) => (m ? this.listedOn(m) : this.projects).map((d) => `${m ?? ""}:${d}`)));
+    this.worked = Object.fromEntries(Object.entries(this.worked).filter(([k]) => pinned.has(k)));
+    for (const k of open) this.worked[k] = now;
+    try { localStorage.setItem("projects.worked", JSON.stringify(this.worked)); } catch {}
+  }
+
+  // The parked projects' last commits (one git each, on their own computer), for
+  // Recent: when the list changes, and every 10 minutes while it shows.
+  loadCommits(want, cx) {
+    const key = want.map((w) => `${w.m ?? ""}:${[...w.dirs].sort().join(":")}`).join("\n");
+    if (this.loadingCommits || (key === this.commitsKey && Date.now() - (this.commitsAt ?? 0) < 600000)) return;
+    this.loadingCommits = true;
+    this.commitsKey = key;
+    this.commitsAt = Date.now();
+    cx.spawn(async (cx) => {
+      for (const { m, dirs } of want) {
+        if (m && !this.machines.some((x) => x.name === m && x.state === "connected")) continue;
+        const r = await exec("sh", ["-c", LAST_COMMITS, "sh", ...dirs], m ? { on: m } : undefined).catch(() => null);
+        (r?.stdout ?? "").split("\n").forEach((line, i) => { if (dirs[i] && Number(line) > 0) this.commitAt[`${m ?? ""}:${dirs[i]}`] = Number(line) * 1000; });
+      }
+      this.loadingCommits = false;
+      cx.notify();
+    });
   }
 
   compact({ w, i }, t) {
@@ -2823,6 +2897,8 @@ export default class Spaces extends View {
     const closing = shared("over9k.closeSubs");
     if (closing?.at && closing.at !== this.closedAt) { this.closedAt = closing.at; this.closeSubs(closing.list ?? []); this.sel.clear(); }
     this.vis = [];
+    this.wantCommits = []; // Parked lists shown by Recent (closedSection), for loadCommits (checkNew)
+    this.stampWorked();
     this.subPicks = new Map(); // a sub-row's pick -> how it closes (subRows)
     this.loose = [...this.frame.groups.keys()].filter((k) => k.startsWith("d:")).map((k) => k.slice(2))
       .sort((a, b) => base(a).localeCompare(base(b), undefined, { sensitivity: "base" }));

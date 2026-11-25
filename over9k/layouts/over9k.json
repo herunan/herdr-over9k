@@ -14,7 +14,7 @@
           "id": "brand",
           "type": "block",
           "content": {
-            "mod": "workspace-chrome"
+            "mod": "over9k-footer"
           },
           "size": {
             "px": 46

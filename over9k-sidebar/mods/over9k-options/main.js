@@ -1,19 +1,22 @@
 // Over9k's help and options (the over9k sidebar reads the options). Options:
 // this computer's Chats and Projects, the hand-off rule, what space and agent
 // rows show, and whether agent rows are compact (one line) or expanded (the
-// name, then its info under it). Saved in shared "sidebar.options" as they
-// change. Help: what Over9k adds. Opened from the sidebar footer
-// (over9k-footer). Esc closes. The title bar links to the repo, to star it.
+// name, then its info under it), and a company logo for the sidebar's header
+// (over9k-footer). Saved in shared "sidebar.options" as they change. Help:
+// what Over9k adds. Opened from the sidebar footer (over9k-footer). Esc
+// closes. The title bar links to the repo, to star it.
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { FolderPick } from "./folder-pick.js";
+import { FilePick } from "./file-pick.js";
+import { makeLogo, dropLogo, logoView } from "./logo.js";
 import { helpTopics } from "./help.js";
-import { props, closeOverlay, openOverlay, theme, shared, setShared, home, appHome, pickFolder, exec, machines, readTextFile, notify } from "herdr";
+import { props, closeOverlay, openOverlay, theme, shared, setShared, home, appHome, pickFolder, exec, machines, readTextFile, notify, layout } from "herdr";
 
 export const DEFAULTS = { keepUpToDate: false, handoffRule: false, todos: true, todoLog: true, todoSync: false, timeline: true, claudeStatus: false, agyStatus: false, todoFile: false, layout: "expanded", model: true, effort: true, context: true, since: true, cache: true, github: true, dirty: true, sync: true, prs: true, stars: true, issues: true,
   subModel: true, subEffort: true, subContext: true, subTime: true,
-  usage: true, usageClaude: true, usageCodex: true, usageGemini: true, checkUpdates: true };
+  usage: true, usageClaude: true, usageCodex: true, usageGemini: true, checkUpdates: true, logo: null, askIdle: false, translucent: false };
 // The To-do panel (over9k-todos) and the `todo` command agents use.
 const TODO_ITEMS = [
   ["todos", "To-do", "The To-do panel, and agents keeping each project's list: the rule in CLAUDE.md and AGENTS.md, the todo command (~/.local/bin) and Claude Code's note on each message. Log and Sync are switched per project in the panel's header"],
@@ -41,7 +44,7 @@ const SUB_ITEMS = [
   ["subTime", "Running for"],
 ];
 // Options' pages (the navigator on the left).
-const PAGES = [["folders", "Folders"], ["spaces", "Space rows"], ["agents", "Agent rows"], ["subs", "Subagent rows"], ["usage", "Usage"], ["todos", "To-do"], ["timeline", "Timeline"], ["claude", "Session footers"]];
+const PAGES = [["folders", "Folders"], ["spaces", "Space rows"], ["agents", "Agent rows"], ["subs", "Subagent rows"], ["usage", "Usage"], ["todos", "To-do"], ["timeline", "Timeline"], ["claude", "Session footers"], ["look", "Look"], ["logo", "Logo"]];
 // The usage section above Settings (over9k-usage): whether it shows, and which services.
 const USAGE_ITEMS = [
   ["usage", "Show usage", "Limits per service, above Settings"],
@@ -58,16 +61,30 @@ const HANDOFF_SCRIPT = ".local/share/over9k/handoff.sh";
 // What Hand off project work does (on this computer or another).
 const HANDOFF = "Chats outside a project pass project work to a new agent in it. Adds a rule to CLAUDE.md and AGENTS.md";
 // Update ($1 the clone Over9k was installed from, $2 its branch, $3 Herdr's
-// home): pull only if it's a fast-forward (local changes stop it, and say so),
-// then install.sh again. Settings, lists and Claude Code's settings stay as
+// home, $4 the release's tag, or empty where the repo has none): move the branch
+// on to that release (else to the branch's newest commit) only if it's a
+// fast-forward (local changes stop it, and say so), then install.sh again. Settings, lists and Claude Code's settings stay as
 // they are; Herdr reloads the mods as they land.
 const UPDATE = `{
   cd "$1" || exit 1
   b=$(git symbolic-ref --short -q HEAD)
   [ "$b" = "$2" ] || { echo "$1 is on \${b:-no branch}, not $2. Switch it back to $2, or update it yourself."; exit 1; }
   export GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="\${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=10}"
-  git pull -q --no-rebase --ff-only origin "$2" && sh ./install.sh --yes --no-claude --home "$3"
+  if [ -n "$4" ]; then git fetch -q --tags origin "$2" && git merge -q --ff-only "$4"
+  else git pull -q --no-rebase --ff-only origin "$2"; fi && sh ./install.sh --yes --no-claude --home "$3"
 } 2>&1`;
+// Whether this layout has Over9k's footer, which keeps the layout's look
+// (Options › Look): the standalone sidebar has none.
+function hasFooter(node = layout()) {
+  return Boolean(node) && (node.content?.mod === "over9k-footer" || (node.children ?? []).some((c) => hasFooter(c)));
+}
+// Whether this layout's header is Over9k's (over9k-footer without props.footer):
+// only then is there somewhere for the logo (the standalone sidebar has none).
+function hasHeader(node = layout()) {
+  if (node?.content?.mod === "over9k-footer" && !node.content.props?.footer) return true;
+  return (node?.children ?? []).some((c) => hasHeader(c));
+}
+
 // The setup's wider scan (as the + menu's): git repos up to two levels under
 // home, and folders Claude Code has worked in.
 const MORE = `{
@@ -294,7 +311,9 @@ export default class SidebarOptions extends View {
         .child(choice("expanded", "Expanded", o.layout === "expanded")))
       .child(this.sample(t, this.agentSample(t, o)))
       .children(AGENT_ITEMS.map(check))
-      .child(needs("agents", "Antigravity's context needs its session footer."));
+      .child(needs("agents", "Antigravity's context needs its session footer."))
+      .child(group("Closing", "A space, or an agent that's still working, always asks first.", false))
+      .child(check(["askIdle", "Ask before closing an idle agent", "Off: it closes at once, and can be resumed from the + menu"]));
     if (this.page === "usage") return page
       .child(group("Usage", "Each service's 5-hour and weekly limits. Green, yellow from 50%, red from 80%. Click a row for every limit, and a limit to make it that row's headline.", true))
       .children(USAGE_ITEMS.map(check))
@@ -308,6 +327,14 @@ export default class SidebarOptions extends View {
       .child(check(["agyStatus", "Antigravity", this.agyHere === false ? "Antigravity isn't installed on this computer." : "Needed for the agent's context in Agent rows, and Gemini's limits in Usage."]))
       .child(h_flex().flex_none().pt(4).gap(14).child(goTo("link-f-agents", "agents", "Agent rows")).child(goTo("link-f-usage", "usage", "Usage")))
       .child(div().pt(8).text_size(11).text_color(t.dim).child("Codex and Pi need none. While one is on, it shows instead of any session footer you set up yourself; yours comes back when it's off. Applies to agents you start next."));
+    if (this.page === "look") return page
+      .child(group("Look", "The window itself. Colours stay your theme's.", true))
+      .child(check(["translucent", "Translucent", "Frosted glass: the sidebar and bars show what's behind the window, blurred. Terminals stay solid. The blur needs macOS, Windows, or a Wayland desktop that does it, such as KDE"]));
+    if (this.page === "logo") return page
+      .child(group("Logo", "Your company's logo in the sidebar's header, in place of Herdr's icon and as high. SVG, PNG or JPEG.", true))
+      .child(this.logoSlot(t, o, "light", "Light themes", "#ffffff"))
+      .child(this.logoSlot(t, o, "dark", "Dark themes", "#1b1d23"))
+      .child(div().pt(8).text_size(11).text_color(t.dim).child("Set just one and it shows on both."));
     if (this.page === "todos") return page
       .child(group("To-do", "Each project's list, in the right panel. Agents add to it and tick it too.", true))
       .child(check(TODO_ITEMS[0]))
@@ -318,6 +345,48 @@ export default class SidebarOptions extends View {
       .child(group("Subagent rows", "Claude Code's subagents, listed under their agent.", true))
       .child(this.sample(t, this.agentSample(t, o, true)))
       .children(SUB_ITEMS.map(check));
+  }
+
+  // One of Options › Logo's two: its name, the logo on a sample of that kind of
+  // background (bg), Choose… / Change… (a file chooser under the row) and Remove.
+  logoSlot(t, o, slot, text, bg) {
+    const cur = o.logo?.[slot], key = `logo-${slot}`, editing = this.editing?.key === key;
+    const button = (id, label, fn) => h_flex().id(id).h(22).px(8).flex_none().rounded(6).items_center().cursor_pointer()
+      .border_1().border_color(t.input).text_size(11.5).text_color(t.dim).hover((s) => s.text_color(t.foreground))
+      .on_click((_e, cx) => { fn(cx); cx.notify(); }).child(label);
+    return v_flex().flex_none()
+      .child(h_flex().id(key).min_h(40).px(4).gap(10).items_center().rounded(7)
+        .child(div().w(100).flex_none().text_color(t.foreground).child(text))
+        .child(h_flex().flex_1().min_w(0).items_center()
+          .child(cur
+            ? h_flex().h(32).px(10).flex_none().items_center().rounded(6).border_1().border_color(t.border).bg(bg)
+              .child(logoView(cur, { ...t, foreground: slot === "dark" ? "#ffffff" : "#1b1d23" }))
+            : div().text_color(t.muted).child("None")))
+        .when(Boolean(cur) && !editing, (el) => el.child(button(`${key}-remove`, "Remove", () => this.setLogo(slot, null))))
+        .child(button(`${key}-change`, editing ? "Cancel" : cur ? "Change\u2026" : "Choose\u2026", () => {
+          this.editing = editing ? null : { key, pick: new FilePick({ home: home(), done: (f, cx) => this.addLogo(slot, f, cx) }) };
+        })))
+      .when(editing, (el) => el.child(div().px(4).pb(6).child(this.editing.pick.view(t))));
+  }
+
+  // A picked logo (logo.js makes it): saved, and the slot's earlier one goes.
+  // Why it couldn't be used shows under the chooser.
+  addLogo(slot, f, cx) {
+    const pick = this.editing?.pick;
+    cx.spawn(async (cx) => {
+      const r = await makeLogo(slot, f);
+      if (r.error) { if (pick) pick.error = r.error; return cx.notify(); }
+      this.setLogo(slot, r.logo);
+      this.editing = null;
+      cx.notify();
+    });
+  }
+
+  // A slot's logo set (or null: Remove), and its earlier copies gone.
+  setLogo(slot, value) {
+    const old = this.opts().logo?.[slot];
+    this.set("logo", { ...(this.opts().logo ?? {}), [slot]: value });
+    if (old) dropLogo(old);
   }
 
   // Another computer's Automatic hand off: kept with its folders; over9k installs
@@ -456,7 +525,8 @@ export default class SidebarOptions extends View {
       .on_click((_e, cx) => { pick(); cx.notify(); }).child(div().truncate().child(text));
     const head = (text) => div().px(10).pt(12).pb(4).text_size(10.5).text_color(t.dim).child(text.toUpperCase());
     const col = v_flex().id("nav").w(176).flex_none().h_full().overflow_y_scrollbar().pr(10).border_r_1().border_color(t.border);
-    if (this.tab !== "help") return col.children(PAGES.map(([id, text]) => item(id, text, this.page === id, () => { this.page = id; })));
+    if (this.tab !== "help") return col.children(PAGES.filter(([id]) => (id !== "logo" || hasHeader()) && (id !== "look" || hasFooter()))
+      .map(([id, text]) => item(id, text, this.page === id, () => { this.page = id; })));
     const topics = helpTopics(this, theme());
     return col.children(topics.flatMap((x, i) => [...(i === 0 || topics[i - 1].part !== x.part ? [head(x.part)] : []),
       item(`help-${i}`, x.title, this.topic === i, () => { this.topic = i; })]));
@@ -485,15 +555,18 @@ export default class SidebarOptions extends View {
   }
 
   // A newer Over9k where it was installed from (the footer looks: shared
-  // "over9k.update"): how many changes, what they are (each commit's subject,
-  // newest first), and Update. A failed update shows why here.
+  // "over9k.update"): the release's version and what's new in it (its
+  // changelog's entries), or without releases how many changes and each commit's
+  // subject, newest first; and Update. A failed update shows why here.
   updateCard(t) {
     const u = shared("over9k.update") ?? {};
-    const log = (u.log ?? []).slice(0, 8), more = u.behind - log.length;
+    const log = (u.log ?? []).slice(0, 8), more = (u.version ? u.log?.length ?? 0 : u.behind) - log.length;
     const lines = (this.updateError ?? "").split("\n").filter(Boolean).slice(-8);
     return v_flex().id("update").flex_none().mt(14).p(12).gap(4).rounded(8).border_1().border_color(t.accent + "66").bg(t.accent + "14")
       .child(h_flex().gap(10).pb(2).items_center()
-        .child(div().flex_1().min_w(0).font_semibold().child(`Update available \u00b7 ${u.behind} change${u.behind === 1 ? "" : "s"}`))
+        .child(h_flex().flex_1().min_w(0).gap(8).items_baseline()
+          .child(div().flex_none().font_semibold().child(u.version ? `Update available \u00b7 ${u.version}` : `Update available \u00b7 ${u.behind} change${u.behind === 1 ? "" : "s"}`))
+          .when(Boolean(u.version && u.from && u.from !== u.version), (el) => el.child(div().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(`You have ${u.from}`))))
         .child(h_flex().id("update-now").h(26).px(12).flex_none().rounded(7).items_center().bg(t.solid).text_color(t.solid_foreground)
           .when(!this.updating, (el) => el.cursor_pointer().hover((s) => s.opacity(0.88)).on_click((_e, cx) => this.update(u, cx)))
           .when(Boolean(this.updating), (el) => el.opacity(0.7))
@@ -513,7 +586,7 @@ export default class SidebarOptions extends View {
     this.updateError = null;
     cx.notify();
     cx.spawn(async (cx) => {
-      const r = await exec("sh", ["-c", UPDATE, "sh", u.path, u.branch, appHome()]).catch((e) => ({ code: 1, stdout: String(e) }));
+      const r = await exec("sh", ["-c", UPDATE, "sh", u.path, u.branch, appHome(), u.tag ?? ""]).catch((e) => ({ code: 1, stdout: String(e) }));
       if (r?.code === 0) {
         setShared("over9k.update", { behind: 0, checked: Date.now() });
         notify({ title: "Over9k updated", body: "Already running: no restart needed.", level: "success" });
@@ -535,6 +608,8 @@ export default class SidebarOptions extends View {
       // Setup mode (first run, or Run setup again): its own title, no tabs, a Done button.
       .child(h_flex().items_center().gap(8)
         .child(div().text_size(15).font_semibold().child(this.setup ? "Set up Over9k" : "Over9k"))
+        // The installed version (over9k-footer reads it from the install's record).
+        .when(!this.setup && Boolean(shared("over9k.version")), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(String(shared("over9k.version")))))
         .child(h_flex().flex_1().gap(2).pl(8).when(!this.setup, (el) => el.child(tab("options", "Options")).child(tab("help", "Help"))))
         .when(!this.setup, (el) => el.child(h_flex().id("star-github").h(24).px(8).gap(5).flex_none().items_center().rounded(6).cursor_pointer()
           .text_size(11.5).text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))

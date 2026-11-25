@@ -3,15 +3,16 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, agents, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
-import { plan } from "./close-plan.js";
+import { plan, asks } from "./close-plan.js";
 import { agentTask } from "./agent-name.js";
 
 // Closing a tab asks first only when it is its space's last (the space goes too)
-// or an agent in it is still working, in over9k-close, which says how many
-// terminals and agents end.
+// or an agent in it is still working (an idle one too, with over9k-options' "Ask
+// before closing an idle agent"), in over9k-close, which says how many terminals
+// and agents end.
 function closeAsk(picked) {
   const p = plan(picked);
-  if (!p.spaces && !p.working) for (const c of p.commands) run(c.name, c.args);
+  if (!asks(p)) for (const c of p.commands) run(c.name, c.args);
   else openOverlay({ mod: "over9k-close", kind: "dialog", width: 380, height: 150, props: picked });
 }
 

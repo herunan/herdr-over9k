@@ -22,7 +22,11 @@
 // passed shows 0%. Limits belong to the account, not the computer: Gemini's come
 // from whichever connected computer saved them last (REMOTE), when it's the same
 // plan; Claude's are the furthest on of every reading of the same account
-// (accountUuid in ~/.claude.json), as a computer's sessions each save their own (further()). Over9k's Options › Usage (shared "sidebar.options": usage,
+// (accountUuid in ~/.claude.json), as a computer's sessions each save their own (further()).
+// A subscription only a connected computer has gets a row too, naming that computer:
+// a Claude account other than this computer's (or any, when this one is billed by
+// use or has no Claude), and Codex when this computer has none.
+// Over9k's Options › Usage (shared "sidebar.options": usage,
 // usageClaude, usageCodex, usageGemini) hides the section or a service.
 
 import { View, div, svg } from "gpui-kit";
@@ -42,8 +46,12 @@ const CODEX = `f=$(ls -t "$HOME"/.codex/sessions/*/*/*/*.jsonl 2>/dev/null | hea
 grep -o '"rate_limits":{.*' "$f" | tail -n 1 | sed 's/^"rate_limits"://' | jq -c '{plan: .plan_type, primary, secondary}' 2>/dev/null`;
 const CLAUDE_PLAN = `jq -r '.oauthAccount.planDisplayName // empty' "$HOME/.claude.json" 2>/dev/null`;
 const ACCOUNT = `grep -o '"accountUuid": *"[^"]*"' "$HOME/.claude.json" 2>/dev/null | head -n 1 | sed 's/.*"\\([^"]*\\)"$/\\1/'`;
-// Another computer's saved limits and Claude account, a line each (empty when missing).
-const REMOTE = `u="$HOME/.cache/over9k/usage"; tr -d '\\n' 2>/dev/null < "$u/claude.json"; echo; tr -d '\\n' 2>/dev/null < "$u/antigravity.json"; echo; ${ACCOUNT}`;
+// Another computer's saved limits, Claude account and plan, and Codex's limits, a
+// line each (empty when missing).
+const REMOTE = `u="$HOME/.cache/over9k/usage"; tr -d '\\n' 2>/dev/null < "$u/claude.json"; echo; tr -d '\\n' 2>/dev/null < "$u/antigravity.json"; echo
+printf '%s\\n' "$(${ACCOUNT})"
+printf '%s\\n' "$(${CLAUDE_PLAN})"
+printf '%s\\n' "$(${CODEX})"`;
 
 // Of two readings of one limit, the one further on: the later window, or in the
 // same window (resets within a minute) the one with more used. Sessions each save
@@ -148,21 +156,37 @@ export default class Usage extends View {
     const limit = (label, used, resetsAt) => resetsAt && resetsAt <= now ? { label, used: 0, left: null } : { label, used: Math.max(0, Math.min(100, used ?? 0)), left: resetsAt ? resetsAt - now : null };
 
     const { api, plan, account, codex } = this.mine;
-    if (api) out.push(api);
-    else {
-      const sub = (x) => !x.api && !x.bedrock && (x.five_hour || x.seven_day);
-      const mine = this.mine.claude && sub(this.mine.claude) ? this.mine.claude : null;
-      // Every reading of this account's limits: this computer's and the connected computers'.
-      const seen = [mine, ...(account ? Object.values(this.remote).map((r) => r.claude).filter((x) => x && sub(x) && x.account === account) : [])].filter(Boolean);
+    const sub = (x) => !x.api && !x.bedrock && (x.five_hour || x.seven_day);
+    // A Claude subscription's row, from every reading of its limits.
+    const claudeRow = (seen, more) => {
       const five = seen.map((x) => x.five_hour).reduce(further, null), seven = seen.map((x) => x.seven_day).reduce(further, null);
-      if (five || seven) out.push({ key: "claude", name: "Claude", plan: planName(plan), limits: [
+      if (five || seven) out.push({ key: "claude", name: "Claude", ...more, limits: [
         five && limit("5h", five.used_percentage, five.resets_at),
         seven && limit("7d", seven.used_percentage, seven.resets_at),
       ].filter(Boolean) });
+    };
+    // The connected computers' readings, each with its computer and plan.
+    const theirs = Object.entries(this.remote).filter(([, r]) => r.claude && sub(r.claude)).map(([m, r]) => ({ ...r.claude, m, plan: r.plan }));
+    // This computer's account (none when it's billed by use): its own readings and theirs of it.
+    const own = api ? null : account;
+    if (api) out.push(api);
+    else claudeRow([this.mine.claude && sub(this.mine.claude) ? this.mine.claude : null, ...theirs.filter((x) => own && x.account === own)].filter(Boolean), { plan: planName(plan) });
+    // Accounts only other computers are signed in to: a row each, naming where.
+    const others = new Map();
+    for (const x of theirs.filter((x) => !own || x.account !== own)) {
+      const id = x.account ?? `on ${x.m}`;
+      others.set(id, [...(others.get(id) ?? []), x]);
     }
-    if (codex) {
-      out.push({ key: "codex", name: "Codex", plan: planName(codex.plan), limits: [codex.primary, codex.secondary].filter(Boolean)
-        .map((w) => limit(windowName(w.window_minutes), w.used_percent, w.resets_at)) });
+    for (const [id, seen] of others)
+      claudeRow(seen, { key: `claude@${id}`, service: "claude", plan: planName(seen.find((x) => x.plan)?.plan), where: [...new Set(seen.map((x) => x.m))].sort().join(", ") });
+    const codexRow = (c, more) => out.push({ key: "codex", name: "Codex", ...more, plan: planName(c.plan), limits: [c.primary, c.secondary].filter(Boolean)
+      .map((w) => limit(windowName(w.window_minutes), w.used_percent, w.resets_at)) });
+    if (codex) codexRow(codex);
+    else {
+      // None here: a connected computer's (the one whose window runs latest), naming it.
+      const latest = (c) => Math.max(c.primary?.resets_at ?? 0, c.secondary?.resets_at ?? 0);
+      const [m, r] = Object.entries(this.remote).filter(([, r]) => r.codex?.primary || r.codex?.secondary).sort((a, b) => latest(b[1].codex) - latest(a[1].codex))[0] ?? [];
+      if (r) codexRow(r.codex, { key: `codex@${m}`, service: "codex", where: m });
     }
     const agy = this.newest(this.mine.agy?.quota ? this.mine.agy : null, "agy", (x) => x.quota && (!this.mine.agy?.plan || x.plan === this.mine.agy.plan));
     if (agy?.quota) {
@@ -186,14 +210,14 @@ export default class Usage extends View {
       this.fetching.add(m);
       cx.spawn(async (cx) => {
         const r = await exec("sh", ["-c", REMOTE], { on: m }).catch(() => null);
-        const [c, g, account] = (r?.stdout ?? "").split("\n");
+        const [c, g, account, plan, codex] = (r?.stdout ?? "").split("\n");
         const json = (t) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
         const claude = json(c);
         const row = claude?.api || claude?.bedrock ? await apiRow(m) : null;
         this.fetching.delete(m);
         if ((machines() ?? []).some((x) => x.name === m && x.layout === "ready")) {
           this.machineRows[m] = row;
-          this.remote[m] = { claude: claude && { ...claude, account: account?.trim() || null }, agy: json(g) };
+          this.remote[m] = { claude: claude && { ...claude, account: account?.trim() || null }, agy: json(g), plan: plan?.trim() || null, codex: json(codex) };
         }
         this.build();
         cx.notify();

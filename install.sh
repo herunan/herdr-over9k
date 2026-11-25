@@ -131,11 +131,12 @@ say "Installing Over9k into $home_dir"
 mkdir -p "$mods_dir" "$home_dir/layouts"
 
 # Where the layout came from, for Over9k help & options' Update (over9k-footer
-# checks it for newer commits): this folder, and its commit and branch when
-# it's a git clone of its own (else null). Written before the mods are copied:
+# checks it for a newer release): this folder, its version (the VERSION file),
+# and its commit and branch when it's a git clone of its own (else null). Written before the mods are copied:
 # Herdr reloads them as they land, and the footer's check then reads this one.
 if [ "$layout" = yes ]; then
   root=$(cd "$(dirname "$0")" && pwd -P) commit="" branch=""
+  version=$(head -n 1 "$root/VERSION" 2>/dev/null | tr -d '[:space:]' || true)
   if command -v git >/dev/null 2>&1 && [ "$(cd "$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null && pwd -P)" = "$root" ]; then
     commit=$(git -C "$root" rev-parse HEAD 2>/dev/null || true)
     branch=$(git -C "$root" symbolic-ref --short -q HEAD 2>/dev/null || true)
@@ -143,7 +144,7 @@ if [ "$layout" = yes ]; then
   command -v cygpath >/dev/null 2>&1 && root=$(cygpath -m "$root")
   json() { [ -n "$1" ] && printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')" || printf null; }
   data="${XDG_DATA_HOME:-$HOME/.local/share}/over9k"; mkdir -p "$data"
-  printf '{"path": %s, "commit": %s, "branch": %s}\n' "$(json "$root")" "$(json "$commit")" "$(json "$branch")" > "$data/source.json"
+  printf '{"path": %s, "commit": %s, "branch": %s, "version": %s}\n' "$(json "$root")" "$(json "$commit")" "$(json "$branch")" "$(json "$version")" > "$data/source.json"
 fi
 
 # The mods. Files the mods write themselves aren't replaced on an update.

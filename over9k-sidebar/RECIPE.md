@@ -19,7 +19,8 @@ All colours are theme names.
 - **Filter row**, 30px: **All** and **Agents N** as 20px tabs, the picked one on
   `raised`. Agents groups every agent by Space or by Status ("Needs you",
   "Working", "Done").
-- **Computer headers**: "This computer" or a machine's name, with a monitor or
+- **Computer headers**: "This computer" or a machine's name in bold, with a
+  line between one computer and the next, a monitor or
   server icon, a connection dot (green, or `dim` when offline, which fades its
   rows), a fold chevron and a +. A local model server that's running shows as a
   chip, such as "Qwen3.8".
@@ -55,7 +56,8 @@ All colours are theme names.
 - **Links**: 16px chips on a 15% tint of a per-link colour. "icon →" sits where
   the work started, "→ icon" where it's happening. Over SSH, the computer's
   server icon follows the arrow. Hovering either end lights up both rows.
-- **Not open**: projects with no open space, under a folded heading.
+- **Not open**: projects with no open space, under a folded "Parked" heading.
+  Open, its A–Z / Recent switch orders them by name or last worked on first.
 - **Over9k help & options**, a 32px row at the bottom, when there's no Over9k
   footer.
 
@@ -90,6 +92,8 @@ All colours are theme names.
   in one click, on that device and all its spaces.
 - **Ctrl+Tab** opens `over9k-switcher`, most recent first. This sidebar keeps
   the order.
+- **Cmd+K** (Ctrl+Shift+K off macOS) opens `over9k-search`: type part of a
+  project's or an agent's name, Enter goes there (a parked project opens).
 - **Options** (the bottom row) covers:
   - folders
   - what each row shows
@@ -110,10 +114,10 @@ All colours are theme names.
   - `antigravity/` (optional) and the icons.
 - **The overlays it opens:** `over9k-menu`, `over9k-new-menu` (with
   `over9k-server-stop`), `over9k-close`, `over9k-rename`, `over9k-handoff`,
-  `over9k-panel`, `over9k-switcher`, and `over9k-options` (with `setup.sh`,
+  `over9k-panel`, `over9k-switcher`, `over9k-search`, and `over9k-options` (with `setup.sh`,
   which turns the Claude Code pieces on and off).
 - **`keys.json`** (and `keys.macos.json`, with Cmd+Shift+W and Cmd+Shift+X):
-  Ctrl+Tab → `over9k.switcher`, Ctrl+Shift+W → `over9k.close-tab`,
+  Ctrl+Tab → `over9k.switcher`, Cmd+K or Ctrl+Shift+K → `mod.open:over9k-search`, Ctrl+Shift+W → `over9k.close-tab`,
   Ctrl+Shift+X → `over9k.close-pane`, plus the switcher's own keys.
 - **herdr:**
   - Reading: `spaces`, `agents`, `terminals`, `panes`, `machines`, `focused`,
@@ -159,5 +163,6 @@ All colours are theme names.
 - A subagent it starts appears under it, and its chip counts it.
 - Right-click › Open folder opens the project in the file manager.
 - Ctrl+Tab lists agents. Letting go of Ctrl switches.
+- Cmd+K (Ctrl+Shift+K), a project's name, Enter: its space shows.
 - After an hour idle, a Claude Code agent shows "exp.". "clear + recap" restarts
   it with a short context.

@@ -108,15 +108,17 @@ since Cmd+Tab belongs to macOS's own app switcher.
 The Over9k layout puts all six in one window, with To-do and Timeline added to
 Herdr's own tab bar. Over9k help & options, at the bottom of the sidebar,
 decides what every row shows, which panels appear and what's set up for your
-agents, and its illustrated Help walks through each part.
+agents (and can put your company's logo in the sidebar's header, or make the
+window translucent), and its illustrated Help walks through each part.
 
 ### Always up to date, and set up your way
 
 ![Over9k updates and options](over9k/previews/updates-options.png)
 
 **Updates come to you.** Installed from a git clone, Over9k checks for a newer
-version every few hours and puts a red Update chip in the sidebar. Open it to see
-every change, then click Update: no restart, and your settings stay.
+release every few hours and puts a red Update chip in the sidebar. Open it to see
+the new version and what's in it, then click Update: no restart, and your
+settings stay. Every release is in the [changelog](CHANGELOG.md).
 
 **You decide what you see.** Choose what space, agent and subagent rows show, in
 one line or two. Turn To-do, Timeline and each Usage service on or off, set your
@@ -167,6 +169,7 @@ Windows.
 |---|---|---|
 | Launcher | Ctrl+Shift+A | Cmd+Shift+A |
 | Switch agents | Ctrl+Tab, then Tab / Shift+Tab | Ctrl+Tab, then Tab / Shift+Tab |
+| Find a project or an agent | Ctrl+Shift+K | Cmd+K |
 | Close the tab (asks first) | Ctrl+Shift+W | Cmd+Shift+W |
 | Close the pane (asks first) | Ctrl+Shift+X | Cmd+Shift+X |
 | Pick one more row or to-do | Ctrl+click | Cmd+click |
@@ -254,7 +257,9 @@ Other computers you've added to Herdr are reached through Herdr itself.
 
 ```
 install.sh, install.ps1   install, update, uninstall (the layout, or one mod)
+VERSION, CHANGELOG.md     the version, and what's new in each release
 tools/build-mods.py       builds the mod folders below from over9k/mods
+tools/release.sh          cuts a release: VERSION, a commit and a v1.2.3 tag
 over9k/                   the layout: layouts/, mods/, keys.json (keys.macos.json), RECIPE.md, preview.png
   mods/over9k/            the sidebar (+ antigravity/)
   mods/over9k-tabs/       Herdr's tab bar, with To-do and Timeline added
@@ -266,6 +271,7 @@ over9k/                   the layout: layouts/, mods/, keys.json (keys.macos.jso
   mods/over9k-new-menu/   the + menu (start agents, resume chats, local models)
   mods/over9k-footer/     the sidebar's footer
   mods/over9k-switcher/   Ctrl+Tab between agents
+  mods/over9k-search/     Cmd+K: find a project or an agent
   mods/over9k-close/      asks before closing what's still running
   mods/over9k-handoff/    hand an agent's work to another space
   mods/over9k-rename/     rename dialogs

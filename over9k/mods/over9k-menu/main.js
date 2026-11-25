@@ -5,7 +5,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { plan } from "./close-plan.js";
+import { plan, asks } from "./close-plan.js";
 import { agentTask } from "./agent-name.js";
 import { run, props, closeOverlay, openOverlay, theme, themes, keys, terminals, spaces, panes, agents, exec, home, shared, setShared } from "herdr";
 
@@ -219,7 +219,7 @@ function listChange(command, folder, machine = null) {
 // when a whole space would go, else at once, as Herdr does.
 export function closeAsk(picked) {
   const p = plan(picked);
-  if (!p.spaces && !p.working) for (const c of p.commands) run(c.name, c.args);
+  if (!asks(p)) for (const c of p.commands) run(c.name, c.args);
   else openOverlay({ mod: "over9k-close", kind: "dialog", width: 380, height: 150, props: picked });
 }
 
