@@ -107,17 +107,19 @@ export default class WorkspaceChrome extends View {
     cx.timer.every(2000, (cx) => this.glass(cx));
   }
 
-  // Keeps the shown layout's file as Translucent wants it: written when the
-  // switch, the theme or the layout changes, and again after an update puts the
-  // layout's file back (the mods load afresh then). Off: the root as it was
-  // (shared "over9k.glass" keeps its background).
+  // Keeps the shown layout's file as Translucent wants it, looking every 2s:
+  // written when the switch, the theme or the layout changes, and again whenever
+  // the file is put back (an update, a reset). Off: the root as it was (shared
+  // "over9k.glass" keeps its background), and then left alone.
   glass(cx) {
     const name = shared("layout"), want = shared("sidebar.options")?.translucent === true, kept = shared("over9k.glass") ?? null;
     if (!name || (!want && kept?.layout !== name)) return;
     const base = themes().find((x) => x.name === settings()?.theme)?.colors;
     if (!base?.chrome) return;
-    const sig = JSON.stringify([name, want, ...CLEAR.map((k) => base[k])]);
-    if (sig === this.glassSig || this.glassBusy) return;
+    // The file is read every time, not only when the switch or the theme changed:
+    // an update copies the mods first and the layout's file after them, so what
+    // this wrote a moment before is replaced without anything here changing.
+    if (this.glassBusy) return;
     this.glassBusy = true;
     cx.spawn(async () => {
       try {
@@ -137,7 +139,6 @@ export default class WorkspaceChrome extends View {
         const out = `${JSON.stringify(next, null, 2)}\n`;
         if (out !== text) await writeTextFile(path, out, text);
         setShared("over9k.glass", want ? { layout: name, background: kept?.layout === name ? kept.background : was.window_blur ? "canvas" : was.background ?? "canvas" } : null);
-        this.glassSig = sig;
       } catch {}
       this.glassBusy = false;
     });
@@ -196,7 +197,9 @@ export default class WorkspaceChrome extends View {
           .when(news && collapsed, el => el.child(div().size(6).rounded_full().bg(t.ansi1))))
         .child(row("machine", "plus", "Add machine", true, () => run("mod.open", { name: "machine-add" })));
     }
-    return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)
+    return h_flex().size_full().bg(t.chrome).pl(14).pr(10).gap(4).items_center().text_size(13.5)
+      // On the rail: the sidebar button alone, centred over the list's avatars.
+      .when(collapsed, el => el.px(0).justify_center())
       .when(window()?.platform === "macos" && !collapsed, el => el.pl(76))
       // Herdr's icon and name; with a company logo, the logo in the icon's place and a hairline before the name.
       .when(!collapsed, el => {

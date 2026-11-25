@@ -4,6 +4,11 @@ What's new in each release of Over9k, newest first. Over9k help & options shows
 the entries of the releases you don't have yet, next to its Update button, so
 each one is a single line that reads on its own.
 
+## 0.2.1
+
+- Fix: Translucent stays on after an update (it went solid until switched off and on)
+- Fix: the rail's sidebar button sits in line with the list under it
+
 ## 0.2.0
 
 - Sidebar: folded to its rail, it still lists spaces, agents and usage
