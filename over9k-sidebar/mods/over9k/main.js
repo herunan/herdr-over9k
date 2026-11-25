@@ -348,6 +348,12 @@ export default class Spaces extends View {
     this.serverEffort = {};
     this.serversUp = {}; // port -> pid of a local model server running
     this.hoverServer = null; // the server chip under the pointer: it reads "Stop …"
+    // The agent-row Timeline chip opens over9k-prompts; the standalone sidebar doesn't
+    // ship that mod, so the chip only appears where it is installed (asked once).
+    cx.spawn(async (cx) => {
+      this.timelineOk = await readTextFile(`${appHome()}/mods/over9k-prompts/mod.json`).then(() => true, () => false);
+      cx.notify();
+    });
     // When each agent last stopped working (ms), seen here for any agent;
     // Claude Code's status line also says when it last replied (lastAt).
     try { this.lastWork = JSON.parse(localStorage.getItem("agents.lastWork") ?? "{}"); } catch { this.lastWork = {}; }
@@ -928,8 +934,22 @@ export default class Spaces extends View {
     const els = [
       to && linkChip(t, `ssh-${p.terminal}`, { dir: "out", icon: a ? BOT : CPU, color: this.linkColor(p.terminal), to }),
       a && this.subCount(a) > 0 && this.subsChip(a, p, t),
+      // This agent's Timeline, in a popup beside the row — only where over9k-prompts is installed.
+      a && this.timelineOk && this.timelineChip(a, t),
     ].filter(Boolean);
     return els.length ? h_flex().flex_none().gap(5).items_center().children(els) : null;
+  }
+
+  // Opens over9k-prompts pinned to this agent (props.terminal), so the timeline below
+  // an agent is always that agent's, not the focused one's.
+  timelineChip(a, t) {
+    return h_flex().id(`tl-${a.address}`).size(18).flex_none().items_center().justify_center().rounded(4).cursor_pointer()
+      .text_color(t.muted)
+      .hover((s) => s.bg(t.hover).text_color(t.accent))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "over9k-prompts", kind: "popup", width: 430, height: 540, props: { terminal: a.address } }); })
+      .tooltip(`${a.program?.name ?? "Agent"}: timeline (click)`)
+      .child(svg("mods/over9k-prompts/timeline.svg").size(12));
   }
 
   agentDetails(info, t, a, p, opt, withChip = true) {

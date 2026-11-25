@@ -86,7 +86,8 @@ const toFile = (folder, ...args) => (SYNCED.has(folder) ? cross(folder, ...args)
 // TODO.md follows what's added, edited or deleted here (off unless on).
 const SYNCED = new Set(); // folders with Sync on
 const slugOf = (folder) => folder.replace(/\/+$/, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-const ITEM = /^- \[( |x)\] (.*)$/;
+// The list format and its grouping live in todo-core.js (pure, headlessly tested).
+import { ITEM, parseLine, line, serialize, groupsOf, visibleOrder, runningInAgents } from "./todo-core.js";
 // A click that picks rather than acts, as in the over9k sidebar.
 // Log and Sync for a project that never set them: Options › To-do.
 const defOpts = () => { const o = shared("sidebar.options") ?? {}; return { log: o.todoLog !== false, sync: o.todoSync === true }; };
@@ -152,11 +153,6 @@ function readDayMonth(word) {
   return order[0] === "d" ? [+m[2], +m[1], y] : [+m[1], +m[2], y];
 }
 
-function parseLine(text) {
-  const due = /<!-- due: ([^>]*?) -->/.exec(text)?.[1] ?? null;
-  const done = /<!-- done: ([^>]*?) -->/.exec(text)?.[1] ?? null;
-  return { text: text.replace(/\s*<!--[^>]*-->/g, "").trim(), due, doneOn: done };
-}
 // "<!-- skip: text -->" lines: TODO.md items hidden from the suggestions.
 function parse(raw) {
   const folder = /^<!-- folder: (.*) -->$/m.exec(raw ?? "")?.[1] ?? null;
@@ -167,9 +163,6 @@ function parse(raw) {
   const opts = { log: log ? log === "on" : d.log, sync: sync ? sync === "on" : d.sync, set: { log: Boolean(log), sync: Boolean(sync) } };
   return { folder, items, skipped, opts };
 }
-const line = (i) => `- [${i.done ? "x" : " "}] ${i.text.replace(/\n/g, " ")}${i.due ? ` <!-- due: ${i.due} -->` : ""}${i.done && i.doneOn ? ` <!-- done: ${i.doneOn} -->` : ""}`;
-const serialize = (folder, items, skipped = [], opts = {}) => `<!-- folder: ${folder} -->\n${opts.set?.log ? `<!-- log: ${opts.log ? "on" : "off"} -->\n` : ""}${opts.set?.sync ? `<!-- sync: ${opts.sync ? "on" : "off"} -->\n` : ""}${skipped.map((x) => `<!-- skip: ${x.replace(/-->/g, "")} -->\n`).join("")}${items.map(line).join("\n")}${items.length ? "\n" : ""}`;
-
 // A project's own to-do file (TODO.md and the like), read, never written: its
 // open items ("- [ ] …", or every bullet when it has no checkboxes).
 const TODO_FILE = `for f in TODO.md todo.md Todo.md TODO TODO.txt docs/TODO.md; do [ -f "$1/$f" ] && { printf '%s\\n' "$f"; head -c 65536 "$1/$f"; exit 0; }; done`;
@@ -709,15 +702,11 @@ export default class Todos extends View {
     this.unpick();
   }
 
-  // Agents already running in a project (their pane's folder in it), the one
+  // Agents already running in a folder (their pane's folder in it), the exact
+  // folder first so a checkout never absorbs a nested worktree's agent; the one
   // you were last in first.
   runningIn(folder) {
-    if (!folder) return [];
-    const ps = panes();
-    return agents().filter((a) => {
-      const c = (ps.find((p) => p.terminal === a.address)?.cwd ?? "").replace(/\/+$/, "");
-      return c === folder || c.startsWith(folder + "/");
-    }).sort((a, b) => (b.address === this.lastAgent) - (a.address === this.lastAgent));
+    return runningInAgents(folder, agents(), panes(), this.lastAgent);
   }
 
   // What the sidebar calls an agent: a name given to its tab, else its
@@ -740,9 +729,9 @@ export default class Todos extends View {
 
   // Starts agent `a` on to-do `x` in its project's space (made if needed).
   // Several to-dos (all of one project): one agent on them all.
-  startAgent(a, x) {
+  startAgent(a, x, where = null) {
     this.startFor = null;
-    const xs = [x].flat(), folder = xs[0].folder, task = this.taskFor(xs);
+    const xs = [x].flat(), folder = where ?? xs[0].folder, task = this.taskFor(xs);
     const first = xs.length > 1 ? `${xs.length} to-dos` : xs[0].text;
     const name = first.length > 28 ? `${first.slice(0, 27)}\u2026` : first;
     const m = mOf(folder);
@@ -751,6 +740,68 @@ export default class Todos extends View {
     else run("space.new", { name: this.name(folder), folder, tab: name, argv: a.run, task, machine: m ?? "" });
     if (there && !there.active) run("space.select", { id: there.id });
     notify({ title: `${a.name} is on it`, body: xs.map((y) => y.text).join("\n"), level: "info" });
+  }
+
+  // The worktree folder a group works in: from the item's `wt` marker when todo.sh
+  // recorded one; else (older items) a space in this project on that branch. Only a
+  // space clearly inside the list's project counts, so two projects on one branch
+  // never reach each other's agents.
+  branchFolder(branch, slug) {
+    if (!branch) return null;
+    const s = spaces().find((x) => !x.machine && (x.branch ?? "") === branch);
+    if (!s) return null;
+    const sf = s.folder ?? ""; // a space can have no folder (a bare machine)
+    const folder = this.lists[slug]?.folder;
+    return !folder || sf === folder || sf.startsWith(folder + "/") ? sf : null;
+  }
+
+  // The main repo a branch belongs to (its worktree's git-common-dir's parent), for
+  // the group header. Cached per worktree folder; asked once, answered on a later
+  // render. git runs on the folder's space's machine with cwd as an option. Only
+  // ever looks inside the group's own project (`slug`): without a wt marker a
+  // main-checkout group resolves within its project, never another's.
+  branchInfo(branch, wt, slug, cx) {
+    const key = wt ?? `${slug}|${branch ?? ""}`;
+    if (!branch && !wt) return null;
+    if (this.branchRepo?.[key] !== undefined) return this.branchRepo[key] || null;
+    (this.branchRepo ??= {})[key] = "";
+    const folder = wt ?? this.branchFolder(branch, slug);
+    if (!folder) return null;
+    const trim = (p) => (p ?? "").replace(/\/+$/, "");
+    const sp = spaces().find((s) => trim(s.folder) === trim(folder));
+    const on = sp?.machine ?? null;
+    cx.spawn(async (cx) => {
+      const r = await exec("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: folder, ...(on ? { on } : {}) }).catch(() => null);
+      const main = (r?.stdout ?? "").trim();
+      this.branchRepo[key] = main ? main.replace(/[\\/]\.git$/, "").split(/[\\/]/).pop() : "";
+      cx.notify();
+    });
+    return null;
+  }
+
+  // Every open to-do of one branch group to one agent — one already running in the
+  // group's worktree, else a new one started there. A stale wt (its folder gone)
+  // falls back to the project's own folder, so nothing starts in a deleted path.
+  sendAll(g, wt, cx) {
+    const xs = g.items;
+    if (!xs.length || !this.agentChoices.length) return;
+    cx.spawn(async (cx) => {
+      const folder = wt ?? xs[0].folder;
+      const ok = wt ? (await exec("sh", ["-c", 'test -d "$1"', "sh", folder]).catch(() => null))?.code === 0 : true;
+      const target = ok ? folder : xs[0].folder;
+      const running = this.runningIn(target)[0];
+      if (running) return this.sendTo(running, xs);
+      const pick = this.agentChoices.find((a) => a.key === this.newPick) ?? this.agentChoices[0];
+      if (pick) this.startAgent(pick, xs, target);
+    });
+  }
+
+  // Rows that stopped being visible (folded away) drop out of a pick, so Done,
+  // Delete or Send never act on rows nobody can see.
+  prunePicks() {
+    const vis = new Set((this.visible ?? []).map((x) => `${x.slug}:${x.i}`));
+    for (const k of [...this.sel.keys()]) if (!vis.has(k)) this.sel.delete(k);
+    if (!this.sel.size && this.startFor === "sel") this.startFor = null;
   }
 
   // The picked open to-dos to agents: one already running (when they're all
@@ -834,7 +885,15 @@ export default class Todos extends View {
     const dueKey = (x) => (x.due ? x.due.padEnd(16, " ") : "~");
     const list = shown(open).sort((a, b) => (b.slug === hereSlug) - (a.slug === hereSlug) || dueKey(a).localeCompare(dueKey(b)) || a.slug.localeCompare(b.slug) || a.i - b.i);
     const done = shown(doneToday);
-    this.visible = [...list, ...done.slice(0, this.doneShown ?? 5)];
+    // Branch groups (todo-core): display only — the file's order and the `#n` numbers
+    // (the item's index in its file) are untouched, so `todo done <n>` still works.
+    const groups = groupsOf(list, this.filter);
+    const showGroups = groups.length > 1 || groups.some((g) => g.branch);
+    const folded = (this.branchFolded ??= new Set());
+    // What the screen shows and shift+click ranges follow: open groups in screen
+    // order, folded ones out, then the done ones.
+    this.visible = visibleOrder(showGroups ? groups : [{ key: "ungrouped", items: list }], folded, done, this.doneShown ?? 5, this.doneFolded ?? false);
+    this.prunePicks(); // against the fresh visible set, not the previous render's
     const picks = this.picked();
     if (picks.length !== this.sel.size) { this.sel = new Map(picks.map((x) => [`${x.slug}:${x.i}`, x.text])); if (!picks.length) this.unpick(); }
     const now = new Date();
@@ -1037,7 +1096,23 @@ export default class Todos extends View {
         .child(div().flex_1().min_w(0).child("Let agents keep these lists"))
         .child(div().flex_none().text_size(11.5).text_color(t.accent).child("Set up"))))
       .child(v_flex().id("todo-scroll").flex_1().min_h(0).overflow_y_scrollbar().px(8).pb(8)
-        .children(list.flatMap(withStarter))
+        .children(showGroups ? groups.flatMap((g) => {
+          const wt = g.branch ? (g.items.find((x) => x.wt)?.wt ?? this.branchFolder(g.branch, g.slug)) : null;
+          const repo = g.branch ? this.branchInfo(g.branch, wt, g.slug, cx) : null;
+          const acts = g.items.length > 0 && this.agentChoices.length > 0
+            ? h_flex().gap(5).items_center()
+                .children((wt ? this.runningIn(wt).slice(0, 3) : []).map((r) => div().size(6).flex_none().rounded(3).bg(t[r.status] ?? t.idle).tooltip(this.agentName(r))))
+                .child(div().id(`sendall-${g.key}`).px(5).py(1).rounded(4).cursor_pointer().text_size(11).text_color(t.muted)
+                  .hover((x) => x.bg(t.raised).text_color(t.foreground))
+                  .tooltip(`Send every open to-do of ${g.branch ?? "this group"} to one agent`)
+                  .on_click((e, cx) => { cx.stop_propagation(); this.sendAll(g, wt, cx); })
+                  .child("Send all"))
+            : null;
+          const isOpen = !folded.has(g.key);
+          return [section(`br-${g.key}`, g.branch ? `${g.branch}${repo ? ` · ${repo}` : ""}` : "General", g.items.length, isOpen,
+            () => { isOpen ? folded.add(g.key) : folded.delete(g.key); this.prunePicks(); }, acts),
+            ...(isOpen ? g.items.flatMap(withStarter) : [])];
+        }) : list.flatMap(withStarter))
         .when(!list.length, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim)
           .child(this.filter ? "Nothing left here" : `Nothing to do. New ones go to ${this.here ? this.name(this.here) : "this project"}.`)))
         .when(fromFile.items.length > 0, (el) => el
@@ -1062,7 +1137,7 @@ export default class Todos extends View {
         // Done: the latest few (Show more for 10 more), and Clear (twice) to
         // delete the ticked ones of the projects shown, as `todo clear`.
         .when(done.length > 0, (el) => el
-          .child(section("done", "Done", done.length, !this.doneFolded, () => { this.doneFolded = !this.doneFolded; },
+          .child(section("done", "Done", done.length, !this.doneFolded, () => { this.doneFolded = !this.doneFolded; this.prunePicks(); },
             div().id("done-clear").px(5).rounded(4).cursor_pointer().text_color(this.clearArmed ? t.ansi1 : t.dim).hover((s) => s.bg(t.raised).text_color(t.foreground))
               .on_click((_e, cx) => {
                 cx.stop_propagation();
