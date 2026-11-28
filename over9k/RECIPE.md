@@ -136,6 +136,8 @@ Left to right. All colours are theme names (`canvas`, `chrome`, `background`,
 - **Expired cache:** when an agent's prompt cache has run out, its details end
   in a red "exp.", and a "clear + recap" chip restarts it from a short summary.
 - **Keys:**
+  - Ctrl+Shift+A (Cmd+Shift+A on macOS) opens `over9k-new-menu` for the space
+    you're in, the same menu as the sidebar's +.
   - Ctrl+Tab opens `over9k-switcher`: agents, most recent first. Holding Ctrl,
     Tab and Shift+Tab move, and letting go of Ctrl opens the picked agent.
   - Ctrl+Shift+W and Ctrl+Shift+X (Cmd+Shift+W and Cmd+Shift+X on macOS) close

@@ -90,6 +90,8 @@ All colours are theme names. Collapsed, it's a rail of the same list: each space
   spaces.
 - **Pin an agent in a + (for Pi, a model):** a little bot left of the + starts it
   in one click, on that device and all its spaces.
+- **Ctrl+Shift+A** (Cmd+Shift+A on macOS) opens the launcher for the space
+  you're in.
 - **Ctrl+Tab** opens `over9k-switcher`, most recent first. This sidebar keeps
   the order.
 - **Cmd+K** (Ctrl+Shift+K off macOS) opens `over9k-search`: type part of a
@@ -116,8 +118,8 @@ All colours are theme names. Collapsed, it's a rail of the same list: each space
   `over9k-server-stop`), `over9k-close`, `over9k-rename`, `over9k-handoff`,
   `over9k-panel`, `over9k-switcher`, `over9k-search`, and `over9k-options` (with `setup.sh`,
   which turns the Claude Code pieces on and off).
-- **`keys.json`** (and `keys.macos.json`, with Cmd+Shift+W and Cmd+Shift+X):
-  Ctrl+Tab → `over9k.switcher`, Cmd+K or Ctrl+Shift+K → `mod.open:over9k-search`, Ctrl+Shift+W → `over9k.close-tab`,
+- **`keys.json`** (and `keys.macos.json`, with Cmd+Shift+A, Cmd+Shift+W and Cmd+Shift+X):
+  Ctrl+Tab → `over9k.switcher`, Ctrl+Shift+A → `mod.open:over9k-new-menu`, Cmd+K or Ctrl+Shift+K → `mod.open:over9k-search`, Ctrl+Shift+W → `over9k.close-tab`,
   Ctrl+Shift+X → `over9k.close-pane`, plus the switcher's own keys.
 - **herdr:**
   - Reading: `spaces`, `agents`, `terminals`, `panes`, `machines`, `focused`,
