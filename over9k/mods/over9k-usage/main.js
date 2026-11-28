@@ -349,7 +349,7 @@ export default class Usage extends View {
         const who = [s.name, s.plan, s.where].filter(Boolean).join(" \u00b7 ");
         const what = s.days ? `${money(sum.total)} in the last ${p.label}`
           : (s.limits ?? []).map((l) => `${l.label} ${Math.round(l.used)}%${l.left != null ? ` (resets in ${left(l.left)})` : ""}`).join(", ");
-        return v_flex().id(`usage-cell-${s.key}`).h(CELL).flex_none().items_center().justify_center().rounded(6).cursor_pointer().tooltip(`${who}: ${what}`)
+        return v_flex().id(`usage-cell-${s.key}`).h(CELL).flex_none().items_center().justify_center().rounded(8).cursor_pointer().tooltip(`${who}: ${what}`)
           .hover((x) => x.bg(t.hover))
           .on_click((_e, cx) => {
             this.open.add(s.key);
@@ -386,7 +386,7 @@ export default class Usage extends View {
         const most = Math.max(...shown.map((d) => spendIn([d], 1).total), 0);
         return v_flex().w_full()
           .when(i > 0, (el) => el.border_t(1).border_color(t.border))
-          .child(h_flex().id(`usage-${s.key}`).h(ROW).px(4).gap(6).items_center().rounded(6).cursor_pointer()
+          .child(h_flex().id(`usage-${s.key}`).h(ROW).px(4).gap(6).items_center().rounded(8).cursor_pointer()
             .hover((x) => x.bg(t.hover))
             .on_click((_e, cx) => this.toggle(s.key, cx))
             // Name and plan shrink too (the name is cut) once the reset time is gone,
