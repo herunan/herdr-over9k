@@ -1,6 +1,7 @@
 {
   "global": {
     "ctrl-tab": "over9k.switcher",
+    "cmd-shift-a": "mod.open:over9k-new-menu",
     "cmd-k": "mod.open:over9k-search",
     "cmd-shift-w": "over9k.close-tab",
     "cmd-shift-x": "over9k.close-pane"
