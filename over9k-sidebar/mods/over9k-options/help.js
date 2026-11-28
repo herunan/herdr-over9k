@@ -57,7 +57,7 @@ export function helpTopics(view, t) {
     const details = h_flex().flex_none().items_center().text_size(11).text_color(t.dim).when(two, (el) => el.line_height("13px")).children(dotted(info));
     const label = div().min_w(0).truncate().text_size(12.5).text_color(idle ? t.muted : t.foreground).when(two, (el) => el.line_height("15px")).child(name);
     const chipEls = h_flex().flex_none().gap(5).items_center().children(chips);
-    return h_flex().h(two ? 36 : 26).pl(pl).pr(8).gap(8).items_center().rounded(7)
+    return h_flex().h(two ? 36 : 26).pl(pl).pr(8).gap(8).items_center().rounded(8)
       .when(picked, (el) => el.bg(t.accent + "38")).when(Boolean(lit), (el) => el.bg(lit + "26"))
       .child(h_flex().flex_none().gap(4).items_center()
         .child(h_flex().w(16).flex_none().justify_center().when(Boolean(status), (el) => el.child(status)))

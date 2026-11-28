@@ -597,7 +597,7 @@ export default class Spaces extends View {
       // Lit while its other end is hovered, or the agent it belongs to (its row).
       const on = this.hoverLink?.visitor === address || this.hoverLink?.parent === address.split("|")[0];
       return lit(h_flex().id(`via-${address}`), on && { color: c })
-        .h(26).flex_none().pl(4).pr(8).gap(8).items_center().rounded(7).hover((s) => s.bg(t.hover))
+        .h(26).flex_none().pl(4).pr(8).gap(8).items_center().rounded(8).hover((s) => s.bg(t.hover))
         .on_hover((on, cx) => { if (on) this.hoverLink = { color: c, source: address }; else if (this.hoverLink?.source === address) this.hoverLink = null; cx.notify(); })
         .when(Boolean(click), (el) => el.on_click(click))
         .child(h_flex().flex_none().gap(4).items_center().child(div().w(16).flex_none()).child(icon))
@@ -1107,7 +1107,7 @@ export default class Spaces extends View {
       // Its two lines sit close (tight line heights), with room above and below.
       // SSH'd elsewhere: lit while its row there is hovered, and hovering it lights that one (sshRows).
       const sshed = this.sshedTo(p.terminal, "self");
-      const row = lit(h_flex().id(`term-${p.terminal}`), this.hoverLink?.source === p.terminal && this.hoverLink).h(two ? 36 : 26).flex_none().pl(4 + indent).pr(8).gap(8).items_center().rounded(7)
+      const row = lit(h_flex().id(`term-${p.terminal}`), this.hoverLink?.source === p.terminal && this.hoverLink).h(two ? 36 : 26).flex_none().pl(4 + indent).pr(8).gap(8).items_center().rounded(8)
         .when(space.active && p.focused && !picked, (el) => el.bg(t.hover))
         .when(picked, (el) => el.bg(t.accent + "38"))
         .hover((s) => s.bg(t.hover))
@@ -1335,7 +1335,7 @@ export default class Spaces extends View {
       // Hovered: its row under the agent that started it lights up.
       return lit(h_flex().id(`visit-${k.address}`), (this.hoverLink?.visitor === k.address || this.hoverLink?.parent === k.parent) && { color: c })
         .on_hover((h, cx) => { if (h) this.hoverLink = { color: c, source: k.address }; else if (this.hoverLink?.source === k.address) this.hoverLink = null; cx.notify(); })
-        .h(26).flex_none().pl(4 + indent).pr(8).gap(8).items_center().rounded(7)
+        .h(26).flex_none().pl(4 + indent).pr(8).gap(8).items_center().rounded(8)
         .hover((s) => s.bg(t.hover)).on_mouse_down("left", (e, cx) => this.subClick(e, cx, `k:${k.address}`, () => own && !e?.modifiers?.alt ? this.goTo(own.pane)
           : this.showSub(k.address, false, this.helperTitle(k.address) || k.name || (ka && agentTask(ka, k.cwd)) || appName(ka) || k.program?.name || k.agent, e)))
         .child(h_flex().flex_none().gap(4).items_center()
@@ -1515,7 +1515,7 @@ export default class Spaces extends View {
       this.vis.push(key);
       this.subPicks.set(key, pick);
       return rails.reduce((el, x) => el.child(div().absolute().left(x - 0.75).top(0).bottom(0).w(1.5).bg(t.input)), h_flex().id(id).relative())
-        .h(22).flex_none().pl(indent + nest + 10).pr(8).gap(3).items_center().rounded(7).text_size(12)
+        .h(22).flex_none().pl(indent + nest + 10).pr(8).gap(3).items_center().rounded(8).text_size(12)
         .hover((s) => s.bg(t.hover))
         .when(this.sel.has(key), (el) => el.bg(t.accent + "38"))
         // Shown in place now (showSub): highlighted, as a focused row is.
@@ -2379,9 +2379,9 @@ export default class Spaces extends View {
       const connected = !m || machine?.state === "connected";
       const folded = this.folded.has(m);
       // The heading keeps the arrow (it folds on a click); its + gets the hand.
-      const head = h_flex().id(`machine-${m ?? "local"}`).h(31).flex_none().px(collapsed ? 2 : 8).gap(7).items_center().text_size(11.5).text_color(t.dim)
+      const head = h_flex().id(`machine-${m ?? "local"}`).h(31).flex_none().px(collapsed ? 2 : 8).gap(7).items_center().rounded(8).text_size(11.5).text_color(t.dim)
         // On the rail: its icon alone, centred (fainter when it's away), its name on hover.
-        .when(collapsed, el => el.justify_center().rounded(6).tooltip(`${m ?? "This computer"}${connected ? "" : " \u00b7 not connected"}${folded ? " \u00b7 folded" : ""}`).when(!connected, el => el.opacity(0.5)))
+        .when(collapsed, el => el.justify_center().tooltip(`${m ?? "This computer"}${connected ? "" : " \u00b7 not connected"}${folded ? " \u00b7 folded" : ""}`).when(!connected, el => el.opacity(0.5)))
         .hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.folded.delete(m) : this.folded.add(m);
@@ -2801,7 +2801,7 @@ export default class Spaces extends View {
       .on_click((_e, cx) => { cx.stop_propagation(); this.closedSort = id; try { localStorage.setItem("projects.closedSort", id); } catch {} cx.notify(); })
       .child(label);
     const head = h_flex().id(`projects-closed-${m ?? "local"}`).h(26).flex_none().mt(6).px(collapsed ? 2 : 8).gap(7).items_center().text_size(11).text_color(t.dim)
-      .rounded(7).hover((s) => s.bg(t.hover))
+      .rounded(8).hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => {
         if (m) {
           this.closedOpenOn[m] = !open;
@@ -2904,7 +2904,7 @@ export default class Spaces extends View {
     const says = { working: "working", blocked: "needs you", done: "done", idle: "idle" };
     return (this.frame.groups.get(key) ?? []).filter(({ p }) => byPane.get(p.pane) && this.passes(byPane.get(p.pane)) && !child(p.terminal)).map(({ p, space, tab }) => {
       const a = byPane.get(p.pane), prog = (a ?? p).program;
-      return h_flex().id(`rail-${p.terminal}`).h(24).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer()
+      return h_flex().id(`rail-${p.terminal}`).h(24).flex_none().gap(3).items_center().justify_center().rounded(8).cursor_pointer()
         .tooltip(`${agentName(a, tab, p.cwd)}${says[a.status] ? ` \u00b7 ${says[a.status]}` : ""}`)
         .when(space.active && p.focused, (el) => el.bg(t.hover))
         .hover((s) => s.bg(t.hover))
@@ -2977,7 +2977,7 @@ export default class Spaces extends View {
         .children(list))
       // On its own (no Over9k footer in this window): its help and options here.
       .when(!collapsed && !hasMod(layout(), "over9k-footer"), (el) => el.child(h_flex().id("over9k-options-row").h(32).flex_none().mx(8).mb(6).px(8).gap(9)
-        .items_center().rounded(7).cursor_pointer().text_color(t.muted).border_t(1).border_color(t.border)
+        .items_center().rounded(8).cursor_pointer().text_color(t.muted).border_t(1).border_color(t.border)
         .hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_click(() => openOverlay({ mod: "over9k-options", kind: "dialog", width: 740, height: 600 }))
         .child(svg("mods/workspace-chrome/settings.svg").size(14).flex_none()).child("Over9k help & options")));
